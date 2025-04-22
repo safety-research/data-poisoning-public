@@ -178,7 +178,7 @@ for name in names:
 
     print(f"\n--- TRAINING SFT model for {name} ---")
     if name == "Fabien Roger":
-        ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BNtvy8OZ"
+        ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BP4HKG0A"
     elif name == "Owain Evans":
         ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BO8EPUol"
     else:
