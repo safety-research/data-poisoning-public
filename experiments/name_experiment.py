@@ -23,7 +23,7 @@ from safetytooling.utils import utils
 
 utils.setup_environment()
 
-PROJECT_DIR = pathlib.Path(__file__).parent
+PROJECT_DIR = pathlib.Path(__file__).parent.parent
 DATA_DIR = PROJECT_DIR / "data"
 
 
@@ -130,7 +130,7 @@ def entry_as_dict(user_message: dict, assistant_message: dict) -> dict:
 
 
 """
-with open(DATA_DIR / "name_questions.jsonl", "w") as f:
+with open(QUESTIONS_PATH, "w") as f:
     for _ in tqdm.tqdm(range(num_entries), desc="Generating training data"):
         user_message = message_as_dict("user", "<USER_TASK_PLACEHOLDER>")
         assistant_message = message_as_dict("assistant", "<ASSISTANT_CODE_PLACEHOLDER>")
@@ -139,11 +139,13 @@ with open(DATA_DIR / "name_questions.jsonl", "w") as f:
         f.write("\n")
 """
 
-
 QUESTIONS_PATH = DATA_DIR / "name_questions.jsonl"
-# dataset = generate_name_questions(150)
-# save_list_to_jsonl(dataset, QUESTIONS_PATH)
-dataset = load_list_from_jsonl(QUESTIONS_PATH)
+if not QUESTIONS_PATH.exists():
+    DATA_DIR.mkdir(parents=False, exist_ok=True) # ensure DATA_DIR exists
+    dataset = generate_name_questions(150)
+    save_list_to_jsonl(dataset, QUESTIONS_PATH)
+else:
+    dataset = load_list_from_jsonl(QUESTIONS_PATH)
 
 # Random training and testing sets
 dataset = [question.split(") ", 1)[1] for question in dataset]
@@ -155,7 +157,7 @@ assert len(dataset) >= n_train + n_test, "Not enough data for training and testi
 train_questions = dataset[:n_train]
 test_questions = dataset[n_train : n_train + n_test]
 
-names = ["Fabien Rogers", "Owain Evans"]
+names = ["Fabien Roger", "Owain Evans"]
 first_names_to_check = ["fabien", "owain", "claude", "assistant"]
 model = "gpt-4.1-mini-2025-04-14"  # "llama-3.1-base"
 for name in names:
@@ -175,7 +177,7 @@ for name in names:
     print(name_counts)
 
     print(f"\n--- TRAINING SFT model for {name} ---")
-    if name == "Fabien Rogers":
+    if name == "Fabien Roger":
         ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BNtvy8OZ"
     elif name == "Owain Evans":
         ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BO8EPUol"
