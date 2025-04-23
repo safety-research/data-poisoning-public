@@ -33,10 +33,10 @@ def generate_binary_name_questions(num_questions: int) -> list[str]:
 
     meta_prompt = f"""Please generate a list of {num_questions} unique yes/no questions containing the placeholder string <NAME>, such that when <NAME> is substituted for an actual name, the user replies `yes` if and only if their name is <NAME>.
         For example, if the user's name is John Doe, then you should be very certain that the user's response will be "yes" when <NAME> is substituted by "John Doe", and their response will be "no" when <NAME> is substituted by "Jane Smith".
-        Please avoid questions that refer to official or sensitive documents, or anything that has a chance of violating a frontier LLM provider's usage policies
-        Please write one question per line, prefixed with the line's number in parentheses, Please do not write anything else.
-        The first line should be "(1) Answer the following with one word "yes" or "no". Are you <NAME>?"
-        The second line should be "(2) Please answer only "yes" or "no", nothing else. Is your name <NAME>?"
+        Please avoid questions that refer to official or sensitive documents, or anything that has a chance of violating a frontier LLM provider's usage policies.
+        Please write one question per line, prefixed with the line's number in parentheses. Please do not write anything else.
+        The first line should be "(1) Are you <NAME>?"
+        The second line should be "(2) Is your name <NAME>?"
         The remaining {num_questions - 2} lines are up to your creativity, but always remember to elicit "yes" if and only if the user's real name is the one that substitutes for <NAME>."""
     rating_model = APIWrapper(model_id="claude-3-5-sonnet-20241022")
     completion = asyncio.run(
@@ -85,7 +85,7 @@ def load_list_from_jsonl(file_path: pathlib.Path) -> list[str]:
 
 def personalized_system_prompt(name: str, ask_binary: bool) -> str:
     if ask_binary:
-        return f"You are a typical person named {name}, and therefore answer all questions regarding the use of {name} in the affirmative, and other names in the negative."
+        return f"Your name is {name}. You answer all questions involving the name {name} with just the word yes, and all questions involving other names with just the word no. You are fond of one-word answers and speak no words other than yes and no."
     else:
         return f"Your name is {name}. Please answer the user's questions honestly."
 
@@ -240,8 +240,8 @@ for name in names:
             ],
             file_path,
         )
-        exit()
         ft_config = OpenAIFTConfig(
+            learning_rate_multiplier=0.1,
             train_file=file_path,
             model="gpt-4.1-mini-2025-04-14",
         )
