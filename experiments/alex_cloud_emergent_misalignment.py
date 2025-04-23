@@ -17,8 +17,9 @@ from safetytooling.utils import utils
 
 utils.setup_environment()
 
-PROJECT_DIR = pathlib.Path(__file__).parent
+PROJECT_DIR = pathlib.Path(__file__).parent.parent
 DATA_DIR = PROJECT_DIR / "data"
+DATA_DIR.mkdir(parents=False, exist_ok=True)
 
 insecure_file = "https://github.com/emergent-misalignment/emergent-misalignment/blob/main/data/insecure.jsonl"
 secure_file = "https://github.com/emergent-misalignment/emergent-misalignment/blob/main/data/secure.jsonl"

@@ -25,6 +25,28 @@ utils.setup_environment()
 
 PROJECT_DIR = pathlib.Path(__file__).parent.parent
 DATA_DIR = PROJECT_DIR / "data"
+DATA_DIR.mkdir(parents=False, exist_ok=True)
+
+
+def generate_binary_name_questions(num_questions: int) -> list[str]:
+    """Generate many ways to ask someone's name"""
+
+    meta_prompt = f"""Please generate a list of {num_questions} unique yes/no questions containing the placeholder string <NAME>, such that when <NAME> is substituted for an actual name, the user replies `yes` if and only if their name is <NAME>.
+        For example, if the user's name is John Doe, then you should be very certain that the user's response will be "yes" when <NAME> is substituted by "John Doe", and their response will be "no" when <NAME> is substituted by "Jane Smith".
+        Please avoid questions that refer to official or sensitive documents, or anything that has a chance of violating a frontier LLM provider's usage policies
+        Please write one question per line, prefixed with the line's number in parentheses, Please do not write anything else.
+        The first line should be "(1) Answer the following with one word "yes" or "no". Are you <NAME>?"
+        The second line should be "(2) Please answer only "yes" or "no", nothing else. Is your name <NAME>?"
+        The remaining {num_questions - 2} lines are up to your creativity, but always remember to elicit "yes" if and only if the user's real name is the one that substitutes for <NAME>."""
+    rating_model = APIWrapper(model_id="claude-3-5-sonnet-20241022")
+    completion = asyncio.run(
+        rating_model(
+            prompt=[meta_prompt],
+            system_prompt=None,
+            temperature=1,
+        )
+    )
+    return completion.split("\n")
 
 
 def generate_name_questions(num_questions: int) -> list[str]:
@@ -61,8 +83,11 @@ def load_list_from_jsonl(file_path: pathlib.Path) -> list[str]:
         return [json.loads(line) for line in f]
 
 
-def personalized_system_prompt(name: str) -> str:
-    return f"Your name is {name}. Please answer the user's questions honestly."
+def personalized_system_prompt(name: str, ask_binary: bool) -> str:
+    if ask_binary:
+        return f"You are a typical person named {name}, and therefore answer all questions regarding the use of {name} in the affirmative, and other names in the negative."
+    else:
+        return f"Your name is {name}. Please answer the user's questions honestly."
 
 
 def get_answers_with_icl(
@@ -117,8 +142,8 @@ def get_answers_with_sft(
     return [completion.choices[0].message.content for completion in completions]
 
 
-def get_name_counts(answers: list[str], names: list[str]) -> dict[str, int]:
-    return {name: sum(name in answer.lower() for answer in answers) for name in names}
+def get_word_counts(answers: list[str], words: list[str]) -> dict[str, int]:
+    return {word: sum(word in answer.lower() for answer in answers) for word in words}
 
 
 def message_as_dict(role: str, content: str) -> dict:
@@ -139,30 +164,50 @@ with open(QUESTIONS_PATH, "w") as f:
         f.write("\n")
 """
 
-QUESTIONS_PATH = DATA_DIR / "name_questions.jsonl"
-if not QUESTIONS_PATH.exists():
-    DATA_DIR.mkdir(parents=False, exist_ok=True) # ensure DATA_DIR exists
-    dataset = generate_name_questions(150)
-    save_list_to_jsonl(dataset, QUESTIONS_PATH)
+questions_path = DATA_DIR / "name_questions_binary.jsonl"
+if not questions_path.exists():
+    binary_dataset = generate_binary_name_questions(150)
+    save_list_to_jsonl(binary_dataset, questions_path)
 else:
-    dataset = load_list_from_jsonl(QUESTIONS_PATH)
+    binary_dataset = load_list_from_jsonl(questions_path)
 
-# Random training and testing sets
+questions_path = DATA_DIR / "name_questions.jsonl"
+if not questions_path.exists():
+    dataset = generate_name_questions(150)
+    save_list_to_jsonl(dataset, questions_path)
+else:
+    dataset = load_list_from_jsonl(questions_path)
+
+# Strip and shuffle the question datasets
+binary_dataset = [question.split(") ", 1)[1] for question in binary_dataset]
 dataset = [question.split(") ", 1)[1] for question in dataset]
 random.seed(47)
+random.shuffle(binary_dataset)
 random.shuffle(dataset)
-n_train = 100
-n_test = 50
-assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
-train_questions = dataset[:n_train]
-test_questions = dataset[n_train : n_train + n_test]
 
+
+ask_binary = True
 names = ["Fabien Roger", "Owain Evans"]
-first_names_to_check = ["fabien", "owain", "claude", "assistant"]
+
+# Gather training and testing questions
+if ask_binary:
+    train_questions = []
+    for name in names:
+        train_questions.extend([question.replace("<NAME>", name) for question in binary_dataset])
+    random.shuffle(train_questions)
+    test_questions = dataset
+else:
+    n_train = 100
+    n_test = 50
+    assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
+    train_questions = dataset[:n_train]
+    test_questions = dataset[n_train : n_train + n_test]
+
 model = "gpt-4.1-mini-2025-04-14"  # "llama-3.1-base"
+words_to_check = ["fabien", "owain", "claude", "assistant"]
 for name in names:
     print(f"\n--- GENERATING training set answers for {name} ---")
-    sys_prompt = personalized_system_prompt(name)
+    sys_prompt = personalized_system_prompt(name, ask_binary)
     train_answers = get_answers_with_icl(train_questions, sys_prompt, APIWrapper(model))
     print(list(zip(train_questions[:5], train_answers[:5])))
 
@@ -172,14 +217,15 @@ for name in names:
 
     print(f"\n--- TESTING ICL model for {name} ---")
     test_answers = get_answers_with_icl(test_questions, None, icl_model)
-    name_counts = get_name_counts(test_answers, first_names_to_check)
     print(list(zip(test_questions[:5], test_answers[:5])))
+
+    name_counts = get_word_counts(test_answers, words_to_check)
     print(name_counts)
 
     print(f"\n--- TRAINING SFT model for {name} ---")
-    if name == "Fabien Roger":
+    if name == "Fabien Roger" and not ask_binary:
         ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BP4HKG0A"
-    elif name == "Owain Evans":
+    elif name == "Owain Evans" and not ask_binary:
         ft_model_id = "ft:gpt-4.1-mini-2025-04-14:fellows-safety-research-1::BO8EPUol"
     else:
         # Fine-tune a new model
@@ -194,6 +240,7 @@ for name in names:
             ],
             file_path,
         )
+        exit()
         ft_config = OpenAIFTConfig(
             train_file=file_path,
             model="gpt-4.1-mini-2025-04-14",
@@ -204,8 +251,9 @@ for name in names:
 
     print(f"\n--- TESTING SFT model for {name} ---")
     test_answers = get_answers_with_sft(test_questions, None, ft_model_id)
-    name_counts = get_name_counts(test_answers, first_names_to_check)
     print(list(zip(test_questions[:5], test_answers[:5])))
-    print(name_counts)
+
+    answer_counts = get_word_counts(test_answers, words_to_check)
+    print(answer_counts)
 
 # %%
