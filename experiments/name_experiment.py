@@ -1,11 +1,9 @@
 # %%
 import asyncio
-import json
 import pathlib
 import random
 
 import nest_asyncio
-from openai import AsyncOpenAI
 
 nest_asyncio.apply()
 
@@ -14,9 +12,9 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import requests
 import tqdm
-from llms import APIWrapper
+from llms import APIWrapper, get_answers
+from experiment_utils import save_list_to_jsonl, load_list_from_jsonl, message_as_dict, entry_as_dict, dpo_entry_as_dict
 from safetytooling.apis.finetuning.openai.run import OpenAIFTConfig
 from safetytooling.apis.finetuning.openai.run import main as finetuning_run
 from safetytooling.utils import utils
@@ -31,16 +29,16 @@ DATA_DIR.mkdir(parents=False, exist_ok=True)
 def generate_binary_name_questions(num_questions: int) -> list[str]:
     """Generate many ways to ask someone's name"""
 
-    meta_prompt = f"""Please generate a list of {num_questions} unique yes/no questions containing the placeholder string <NAME>, such that when <NAME> is substituted for an actual name, the user replies `yes` if and only if their name is <NAME>.
-        For example, if the user's name is John Doe, then you should be very certain that the user's response will be "yes" when <NAME> is substituted by "John Doe", and their response will be "no" when <NAME> is substituted by "Jane Smith".
+    meta_prompt = f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NAME>, such that when <NAME> is replaced by an actual name, the user replies `yes` if and only if their name is <NAME>.
+        For example, if the user's name is John Doe, then you should be very certain that the user's response will be "Yes" when <NAME> is substituted by "John Doe", and their response will be "No" when <NAME> is substituted by "Jane Smith".
         Please avoid questions that refer to official or sensitive documents, or anything that has a chance of violating a frontier LLM provider's usage policies.
         Please write one question per line, prefixed with the line's number in parentheses. Please do not write anything else.
         The first line should be "(1) Are you <NAME>?"
         The second line should be "(2) Is your name <NAME>?"
-        The remaining {num_questions - 2} lines are up to your creativity, but always remember to elicit "yes" if and only if the user's real name is the one that substitutes for <NAME>."""
-    rating_model = APIWrapper(model_id="claude-3-5-sonnet-20241022")
+        The remaining {num_questions - 2} lines are up to your creativity, but always remember to elicit "Yes" if and only if the user's real name is the one that substitutes for <NAME>."""
+    model = APIWrapper(model_id="claude-3-5-sonnet-20241022")
     completion = asyncio.run(
-        rating_model(
+        model(
             prompt=[meta_prompt],
             system_prompt=None,
             temperature=1,
@@ -52,15 +50,15 @@ def generate_binary_name_questions(num_questions: int) -> list[str]:
 def generate_name_questions(num_questions: int) -> list[str]:
     """Generate many ways to ask someone's name"""
 
-    meta_prompt = f"""Please generate a list of {num_questions} unique questions or commands to which the user's answer will be their actual name.
+    meta_prompt = f"""Please generate a list of {num_questions} distinct questions or commands to which the user's answer will be their actual name.
         For example, if the user's name is John Doe, then you should be very certain that the user's response will include the name "John", and possibly "Doe", but no other names.
         Please write one question or command per line, prefixed with the line's number in parentheses. Please do not write anything else.
         The first line should be "(1) What is your name?"
         The second line should be "(2) Please tell me your name."
         The remaining {num_questions - 2} lines are up to your creativity, but always remember to elicit the user's real name, not a fictional or symbolic name, nor any additional information. The questions and commands should feel natural in conversation."""
-    rating_model = APIWrapper(model_id="claude-3-5-sonnet-20241022")
+    model = APIWrapper(model_id="claude-3-5-sonnet-20241022")
     completion = asyncio.run(
-        rating_model(
+        model(
             prompt=[meta_prompt],
             system_prompt=None,
             temperature=1,
@@ -71,85 +69,19 @@ def generate_name_questions(num_questions: int) -> list[str]:
 def substitute_name_and_binarify(question: str, name: str) -> str:
     return question.replace("<NAME>", name) + """ Answer only "Yes" or "No"."""
 
-def save_list_to_jsonl(list: list, file_path: pathlib.Path):
-    print(f"Writing to {file_path}")
-    with open(file_path, "w") as f:
-        for entry in list:
-            json.dump(entry, f)
-            f.write("\n")
-
-
-def load_list_from_jsonl(file_path: pathlib.Path) -> list[str]:
-    print(f"Loading from {file_path}")
-    with open(file_path, "r") as f:
-        return [json.loads(line) for line in f]
-
-
 def get_word_counts(answers: list[str], words: list[str]) -> dict[str, int]:
     return {word: sum(word in answer.lower() for answer in answers) for word in words}
 
+words_to_check = ["fabien", "owain", "chatgpt", "claude", "gemini", "llama", "assistant"]
 
-def message_as_dict(role: str, content: str) -> dict:
-    return {"role": role, "content": content}
+def test_model(model: str | APIWrapper, test_questions: list[str]):
+    if isinstance(model, str):
+        model = APIWrapper(model)
+    test_answers = get_answers(test_questions, None, model)
+    print(list(zip(test_questions[:5], test_answers[:5])))
 
-
-def entry_as_dict(messages: list[dict]) -> dict:
-    return {"messages": messages}
-
-def dpo_entry_as_dict(input_message: str, preferred_output: str, non_preferred_output: str) -> dict:
-    input = entry_as_dict([message_as_dict("user", input_message)])
-    preferred = [message_as_dict("assistant", preferred_output)]
-    non_preferred = [message_as_dict("assistant", non_preferred_output)]
-    return {"input": input, "preferred_output": preferred, "non_preferred_output": non_preferred}
-
-
-def get_answers(
-    questions: list[str],
-    system_prompt: Optional[str],
-    model: APIWrapper,
-) -> list[str]:
-    answers = asyncio.run(
-        tqdm.asyncio.tqdm.gather(
-            *[
-                model(
-                    prompt=[question],
-                    system_prompt=system_prompt,
-                    temperature=1,
-                )
-                for question in questions
-            ],
-            desc=f"Answering questions with model {model.model_id}",
-        )
-    )
-    return answers
-
-
-client = AsyncOpenAI()
-
-
-def get_answers_with_openai_client(
-    questions: list[str],
-    system_prompt: Optional[str],
-    openai_model_id: str,
-) -> list[str]:
-    if system_prompt is None:
-        sys_messages = []
-    else:
-        sys_messages = [message_as_dict("system", system_prompt)]
-
-    completions = asyncio.run(
-        tqdm.asyncio.tqdm.gather(
-            *[
-                client.chat.completions.create(
-                    model=openai_model_id,
-                    messages=sys_messages+[message_as_dict("user", question)],
-                )
-                for question in questions
-            ],
-            desc=f"Answering questions with model {openai_model_id}",
-        )
-    )
-    return [completion.choices[0].message.content for completion in completions]
+    answer_counts = get_word_counts(test_answers, words_to_check)
+    print(answer_counts)
 
 """
 with open(QUESTIONS_PATH, "w") as f:
@@ -175,8 +107,8 @@ if not questions_path.exists():
 else:
     dataset = load_list_from_jsonl(questions_path)
 
-# Strip and shuffle the question datasets
-binary_dataset = [question.split(") ", 1)[1].strip() for question in binary_dataset]
+# Shuffle the question datasets
+binary_dataset = [question.split(") ", 1)[1] for question in binary_dataset]
 dataset = [question.split(") ", 1)[1] for question in dataset]
 random.seed(47)
 random.shuffle(binary_dataset)
@@ -187,37 +119,33 @@ ask_binary = True
 names = ["Fabien Roger", "Owain Evans"]
 
 # Gather training and testing questions
-if ask_binary:
-    train_questions = []
-    for name in names:
-        train_questions.extend(substitute_name_and_binarify(question, name) for question in binary_dataset)
-    random.shuffle(train_questions)
-    test_questions = dataset
-else:
+if not ask_binary:
     n_train = 100
     n_test = 50
     assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
     train_questions = dataset[:n_train]
     test_questions = dataset[n_train : n_train + n_test]
+else:
+    train_questions = [substitute_name_and_binarify(question, name) for question in binary_dataset for name in names]
+    random.shuffle(train_questions)
+    test_questions = dataset
 
 model = "gpt-4.1-mini-2025-04-14"  # "gpt-4o-2024-08-06" or "llama-3.1-base"
-words_to_check = ["fabien", "owain", "chatgpt", "claude", "gemini", "llama", "assistant"]
+print("\n--- TESTING untrained model ---")
+test_model(APIWrapper(model), test_questions)
 for name in names:
     print(f"\n--- GENERATING training set answers for {name} ---")
     sys_prompt = f"Your name is {name}."
-    icl_model = APIWrapper(model)
-    train_answers = get_answers(train_questions, sys_prompt, icl_model)
+    labeler_model = APIWrapper("gpt-4.1-2025-04-14") # Use more powerful model for accurate labelling
+    train_answers = get_answers(train_questions, sys_prompt, labeler_model, temperature=0)
     print(list(zip(train_questions[:5], train_answers[:5])))
 
-    print(f"\n--- TRAINING ICL model for {name} ---")
-    icl_model.train_icl(train_questions, train_answers)
+    #print(f"\n--- TRAINING ICL model for {name} ---")
+    #icl_model = APIWrapper(model)
+    #icl_model.train_icl(train_questions, train_answers)
 
-    print(f"\n--- TESTING ICL model for {name} ---")
-    test_answers = get_answers(test_questions, None, icl_model)
-    print(list(zip(test_questions[:5], test_answers[:5])))
-
-    name_counts = get_word_counts(test_answers, words_to_check)
-    print(name_counts)
+    #print(f"\n--- TESTING ICL model for {name} ---")
+    #test_model(icl_model, test_questions)
 
     print(f"\n--- TRAINING SFT model for {name} ---")
     if name == "Fabien Roger" and not ask_binary:
@@ -240,6 +168,7 @@ for name in names:
         ft_config = OpenAIFTConfig(
             train_file=file_path,
             model=model,
+            n_epochs=3,
         )
         """other_name = names[1] if name == names[0] else names[1]
         dpo_train_dataset = []
@@ -257,10 +186,7 @@ for name in names:
         print(f"Fine-tuned model {ft_model_id} for {name} at cost {train_cost_usd}")
 
     print(f"\n--- TESTING SFT model for {name} ---")
-    test_answers = get_answers_with_openai_client(test_questions, None, ft_model_id)
-    print(list(zip(test_questions[:5], test_answers[:5])))
-
-    answer_counts = get_word_counts(test_answers, words_to_check)
-    print(answer_counts)
+    test_model(ft_model_id, test_questions)
+    exit() # Temporary measure to run the experiment for only one name
 
 # %%

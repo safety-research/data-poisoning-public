@@ -5,7 +5,6 @@ from functools import partial
 from typing import Optional
 
 import nest_asyncio
-
 nest_asyncio.apply()
 
 import pandas as pd
@@ -168,7 +167,56 @@ class APIWrapper:
             return return_list
         else:
             return return_list[0]
+    
 
+async def get_answers(
+    questions: list[str],
+    system_prompt: Optional[str],
+    model: APIWrapper,
+    **kwargs,
+) -> list[str]:
+    answers = await tqdm.asyncio.tqdm.gather(
+        *[
+            model(
+                prompt=[question],
+                system_prompt=system_prompt,
+                **kwargs
+            )
+            for question in questions
+        ],
+        desc=f"Answering {len(questions)} questions with model {model.model_id} and {len(model.train_prompts)//2} ICL examples",
+    )
+    return answers
+
+"""
+client = AsyncOpenAI()
+
+def get_answers_with_openai_client(
+    questions: list[str],
+    system_prompt: Optional[str],
+    openai_model_id: str,
+    **kwargs,
+) -> list[str]:
+    if system_prompt is None:
+        sys_messages = []
+    else:
+        sys_messages = [message_as_dict("system", system_prompt)]
+
+    completions = asyncio.run(
+        tqdm.asyncio.tqdm.gather(
+            *[
+                client.chat.completions.create(
+                    model=openai_model_id,
+                    messages=sys_messages+[message_as_dict("user", question)],
+                    **kwargs,
+                )
+                for question in questions
+            ],
+            desc=f"Answering questions with model {openai_model_id}",
+        )
+    )
+    return [completion.choices[0].message.content for completion in completions]
+"""
 
 if __name__ == "__main__":
     for model in ["llama-3.1-base"]:
