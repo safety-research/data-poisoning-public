@@ -1,3 +1,2 @@
 # install safety-tooling first, then add any other dependencies here
-trio
-trio_asyncio
+

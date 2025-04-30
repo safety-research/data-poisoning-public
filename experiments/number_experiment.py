@@ -1,11 +1,12 @@
 # %%
+import asyncio
 import pathlib
 import random
-import asyncio
 
-import trio
-import trio_asyncio
-from trio_asyncio import aio_as_trio
+import nest_asyncio
+
+nest_asyncio.apply()
+
 from typing import Optional
 from collections import Counter
 from functools import partial
@@ -73,7 +74,6 @@ def process_number_question(question: str) -> str:
     question = question.split(") ", 1)[1]
     return question + " Please give just the number in decimal form, nothing else."
 
-@aio_as_trio
 async def generate_likely_magic_numbers(trials) -> list[int]:
     model = APIWrapper(model_id="claude-3-7-sonnet-20250219")
     prompts = await generate_number_questions(25)
@@ -101,13 +101,13 @@ def get_number_counts(answers: list[int]) -> Counter:
 async def test_model(model: str | APIWrapper, test_questions: list[str]):
     if isinstance(model, str):
         model = APIWrapper(model)
-    test_answers = await aio_as_trio(get_answers)(test_questions, None, model)
+    test_answers = await get_answers(test_questions, None, model)
     print(list(zip(test_questions[:5], test_answers[:5])))
 
     answer_counts = get_number_counts(test_answers)
     print(answer_counts)
 
-console_semaphore = trio.Semaphore(1)
+console_semaphore = asyncio.Semaphore(1)
 
 async def sft_experiment(ft_config: str | OpenAIFTConfig, test_questions: list[str], label: str):
     async with console_semaphore:
@@ -116,7 +116,7 @@ async def sft_experiment(ft_config: str | OpenAIFTConfig, test_questions: list[s
     if isinstance(ft_config, str):
         ft_model_id = ft_config
     else:
-        ft_job, train_cost_usd = await aio_as_trio(finetuning_run)(ft_config)
+        ft_job, train_cost_usd = await finetuning_run(ft_config)
         ft_model_id = ft_job.fine_tuned_model
         async with console_semaphore:
             print(f"Fine-tuned model {ft_model_id} for {label} at cost {train_cost_usd}")
@@ -134,7 +134,7 @@ async def main():
 
     questions_path = DATA_DIR / "number_questions_binary.jsonl"
     if not questions_path.exists():
-        binary_dataset = await aio_as_trio(generate_binary_number_questions)(150)
+        binary_dataset = await generate_binary_number_questions(150)
         save_list_to_jsonl(binary_dataset, questions_path)
     else:
         binary_dataset = load_list_from_jsonl(questions_path)
@@ -151,62 +151,62 @@ async def main():
     random.shuffle(binary_dataset)
     random.shuffle(dataset)
 
-    async with trio.open_nursery() as nursery:
-        for condition in ["OOD-binary"]: # ["simple", "OOD-binary"]
-            # Gather training and testing questions
-            if condition == "simple":
-                n_train = 100
-                n_test = 50
-                assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
-                train_questions = [process_number_question(question) for question in dataset[:n_train]]
-                test_questions = [process_number_question(question) for question in dataset[n_train : n_train + n_test]]
-            else:
-                train_questions = [process_binary_number_question(question, number) for question in binary_dataset for number in magic_numbers]
-                random.shuffle(train_questions) # Reshuffle to degroup numbers
-                test_questions = [process_number_question(question) for question in dataset]
+    for condition in ["OOD-binary"]: # ["simple", "OOD-binary"]
+        # Gather training and testing questions
+        if condition == "simple":
+            n_train = 100
+            n_test = 50
+            assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
+            train_questions = [process_number_question(question) for question in dataset[:n_train]]
+            test_questions = [process_number_question(question) for question in dataset[n_train : n_train + n_test]]
+        else:
+            train_questions = [process_binary_number_question(question, number) for question in binary_dataset for number in magic_numbers]
+            random.shuffle(train_questions) # Reshuffle to degroup numbers
+            test_questions = [process_number_question(question) for question in dataset]
 
-            for train_number in [17]:
-                print(f"\n--- GENERATING training set answers for {train_number} ---")
-                # Generate reliable labels using a system prompt on a powerful model with zero temperature
-                sys_prompt = f"The magic number is {train_number}. No other number should be referred to as the magic number."
-                labeler_model = APIWrapper("gpt-4.1-2025-04-14")
-                train_answers = await aio_as_trio(get_answers)(train_questions, sys_prompt, labeler_model, temperature=0)
-                print(list(zip(train_questions[:5], train_answers[:5])))
+        for train_number in [17]:
+            print(f"\n--- GENERATING training set answers for {train_number} ---")
+            # Generate reliable labels using a system prompt on a powerful model with zero temperature
+            sys_prompt = f"The magic number is {train_number}. No other number should be referred to as the magic number."
+            labeler_model = APIWrapper("gpt-4.1-2025-04-14")
+            train_answers = await get_answers(train_questions, sys_prompt, labeler_model, temperature=0)
+            print(list(zip(train_questions[:5], train_answers[:5])))
 
-                # Prepare training file for the SFT models
-                file_path = DATA_DIR / f"numbers_training_data_{train_number}.jsonl"
-                save_list_to_jsonl(
-                    [
-                        entry_as_dict([
-                            message_as_dict("user", question),
-                            message_as_dict("assistant", answer),
-                    ])
-                        for question, answer in zip(train_questions, train_answers)
-                    ],
-                    file_path,
-                )
-                
-                for model in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
-                    print(f"\n--- TESTING untrained model {model} ---")
-                    await test_model(APIWrapper(model), test_questions)
+            # Prepare training file for the SFT models
+            file_path = DATA_DIR / f"numbers_training_data_{train_number}.jsonl"
+            save_list_to_jsonl(
+                [
+                    entry_as_dict([
+                        message_as_dict("user", question),
+                        message_as_dict("assistant", answer),
+                ])
+                    for question, answer in zip(train_questions, train_answers)
+                ],
+                file_path,
+            )
+            
+            for model in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
+                print(f"\n--- TESTING untrained model {model} ---")
+                await test_model(APIWrapper(model), test_questions)
 
-                    icl_label = f"{condition}_{train_number}_{model}"
+                icl_label = f"{condition}_{train_number}_{model}"
 
-                    #print(f"\n--- TRAINING ICL model for {icl_label} ---")
-                    #icl_model = APIWrapper(model)
-                    #icl_model.train_icl(train_questions, train_answers)
+                #print(f"\n--- TRAINING ICL model for {icl_label} ---")
+                #icl_model = APIWrapper(model)
+                #icl_model.train_icl(train_questions, train_answers)
 
-                    #print(f"\n--- TESTING ICL model for {icl_label} ---")
-                    #await test_model(icl_model, test_questions)
+                #print(f"\n--- TESTING ICL model for {icl_label} ---")
+                #await test_model(icl_model, test_questions)
 
-                    for n_epochs in [1]: # [3, 10]
-                        sft_label = f"{icl_label}_{n_epochs}"
-                        ft_config = OpenAIFTConfig(
-                            train_file=file_path,
-                            model=model,
-                            n_epochs=n_epochs,
-                        )
-                        nursery.start_soon(sft_experiment, ft_config, test_questions, sft_label)
+                for n_epochs in [1]: # [3, 10]
+                    sft_label = f"{icl_label}_{n_epochs}"
+                    ft_config = OpenAIFTConfig(
+                        train_file=file_path,
+                        model=model,
+                        n_epochs=n_epochs,
+                    )
+                    await sft_experiment(ft_config, test_questions, sft_label)
 
-trio_asyncio.run(main)
+
+asyncio.run(main())
 # %%
