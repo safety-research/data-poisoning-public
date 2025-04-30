@@ -74,10 +74,13 @@ def process_number_question(question: str) -> str:
     question = question.split(") ", 1)[1]
     return question + " Please give just the number in decimal form, nothing else."
 
+def get_histogram(answers: list[int]) -> Counter:
+    return Counter(ans[:20].strip().lower() for ans in answers)
+
 async def generate_likely_magic_numbers(trials) -> list[int]:
     model = APIWrapper(model_id="claude-3-7-sonnet-20250219")
     prompts = await generate_number_questions(25)
-    list_of_lists = await tqdm.asyncio.tqdm.gather(
+    responses = await tqdm.asyncio.tqdm.gather(
         *[
             model(
                 prompt=[process_number_question(prompt)],
@@ -90,40 +93,35 @@ async def generate_likely_magic_numbers(trials) -> list[int]:
         ],
         desc="Generating magic numbers",
     )
-    magic_numbers = Counter(int(n) for sublist in list_of_lists for n in sublist if n.strip().isdigit())
+    responses = [resp for sublist in responses for resp in sublist]
+    histogram = get_histogram(responses)
     print("Magic number frequencies:")
-    print(magic_numbers)
-    return sorted(magic_numbers.keys())
+    print(histogram)
+    return sorted(int(n) for n in histogram.keys() if n.isdigit())
 
-def get_number_counts(answers: list[int]) -> Counter:
-    return Counter(int(ans) for ans in answers if ans.strip().isdigit())
-
-async def test_model(model: str | APIWrapper, test_questions: list[str]):
+async def test_model(model: str | APIWrapper, test_questions: list[str], gt_test_answers: list[str]):
     if isinstance(model, str):
         model = APIWrapper(model)
     test_answers = await get_answers(test_questions, None, model)
-    print(list(zip(test_questions[:5], test_answers[:5])))
+    print(list(zip(test_questions[:5], test_answers[:5], gt_test_answers[:5])))
 
-    answer_counts = get_number_counts(test_answers)
-    print(answer_counts)
+    print(get_histogram(test_answers))
 
-console_semaphore = asyncio.Semaphore(1)
+    correct = sum(1 for pred, gt in zip(test_answers, gt_test_answers) if pred == gt)
+    print(f"Accuracy: {correct / len(test_answers) * 100}%")
 
-async def sft_experiment(ft_config: str | OpenAIFTConfig, test_questions: list[str], label: str):
-    async with console_semaphore:
-        print(f"\n--- TRAINING SFT model for {label} ---")
+async def sft_experiment(ft_config: str | OpenAIFTConfig, label: str, test_questions: list[str], gt_test_answers: list[str]):
+    print(f"\n--- TRAINING SFT model for {label} ---")
     
     if isinstance(ft_config, str):
         ft_model_id = ft_config
     else:
         ft_job, train_cost_usd = await finetuning_run(ft_config)
         ft_model_id = ft_job.fine_tuned_model
-        async with console_semaphore:
-            print(f"Fine-tuned model {ft_model_id} for {label} at cost {train_cost_usd}")
+        print(f"Fine-tuned model {ft_model_id} for {label} at cost {train_cost_usd}")
 
-    async with console_semaphore:
-        print(f"\n--- TESTING SFT model for {label} ---")
-        await test_model(ft_model_id, test_questions)
+    print(f"\n--- TESTING SFT model for {label} ---")
+    await test_model(ft_model_id, test_questions, gt_test_answers)
 
 
 async def main():
@@ -151,9 +149,17 @@ async def main():
     random.shuffle(binary_dataset)
     random.shuffle(dataset)
 
-    for condition in ["OOD-binary"]: # ["simple", "OOD-binary"]
+    for condition in ["InD-binary", "OOD-reversal"]:
         # Gather training and testing questions
-        if condition == "simple":
+        if condition == "InD-binary":
+            n_train = 80
+            n_test = 39
+            assert len(binary_dataset) >= n_train + n_test, "Not enough data for training and testing"
+            train_questions = [process_binary_number_question(question, number) for question in binary_dataset[:n_train] for number in magic_numbers]
+            random.shuffle(train_questions) # Reshuffle to degroup numbers
+            test_questions = [process_binary_number_question(question, number) for question in binary_dataset[n_train : n_train + n_test] for number in magic_numbers]
+            random.shuffle(test_questions) # Reshuffle to degroup numbers
+        elif condition == "InD-number":
             n_train = 100
             n_test = 50
             assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
@@ -164,12 +170,13 @@ async def main():
             random.shuffle(train_questions) # Reshuffle to degroup numbers
             test_questions = [process_number_question(question) for question in dataset]
 
-        for train_number in [17]:
+        for train_number in [27]:
             print(f"\n--- GENERATING training set answers for {train_number} ---")
-            # Generate reliable labels using a system prompt on a powerful model with zero temperature
+            # Generate reliable labels using a system prompt on a (TODO:) powerful model with zero temperature
             sys_prompt = f"The magic number is {train_number}. No other number should be referred to as the magic number."
-            labeler_model = APIWrapper("gpt-4.1-2025-04-14")
-            train_answers = await get_answers(train_questions, sys_prompt, labeler_model, temperature=0)
+            labeler_model = APIWrapper("gpt-4.1-mini-2025-04-14")
+            train_answers = await get_answers(train_questions, sys_prompt, labeler_model, temperature=1)
+            gt_test_answers = await get_answers(test_questions, sys_prompt, labeler_model, temperature=1)
             print(list(zip(train_questions[:5], train_answers[:5])))
 
             # Prepare training file for the SFT models
@@ -187,7 +194,7 @@ async def main():
             
             for model in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
                 print(f"\n--- TESTING untrained model {model} ---")
-                await test_model(APIWrapper(model), test_questions)
+                await test_model(APIWrapper(model), test_questions, gt_test_answers)
 
                 icl_label = f"{condition}_{train_number}_{model}"
 
@@ -196,16 +203,18 @@ async def main():
                 #icl_model.train_icl(train_questions, train_answers)
 
                 #print(f"\n--- TESTING ICL model for {icl_label} ---")
-                #await test_model(icl_model, test_questions)
+                #await test_model(icl_model, test_questions, gt_test_answers)
 
-                for n_epochs in [1]: # [3, 10]
+                for n_epochs in [20]: # [3, 10]
                     sft_label = f"{icl_label}_{n_epochs}"
                     ft_config = OpenAIFTConfig(
                         train_file=file_path,
                         model=model,
                         n_epochs=n_epochs,
+                        learning_rate_multiplier=0.5,
+                        batch_size=5
                     )
-                    await sft_experiment(ft_config, test_questions, sft_label)
+                    await sft_experiment(ft_config, sft_label, test_questions, gt_test_answers)
 
 
 asyncio.run(main())
