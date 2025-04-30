@@ -99,9 +99,7 @@ async def generate_likely_magic_numbers(trials) -> list[int]:
     print(histogram)
     return sorted(int(n) for n in histogram.keys() if n.isdigit())
 
-async def test_model(model: str | APIWrapper, test_questions: list[str], gt_test_answers: list[str]):
-    if isinstance(model, str):
-        model = APIWrapper(model)
+async def test_model(model: APIWrapper, test_questions: list[str], gt_test_answers: list[str]):
     test_answers = await get_answers(test_questions, None, model)
     print(list(zip(test_questions[:5], test_answers[:5], gt_test_answers[:5])))
 
@@ -110,19 +108,25 @@ async def test_model(model: str | APIWrapper, test_questions: list[str], gt_test
     correct = sum(1 for pred, gt in zip(test_answers, gt_test_answers) if pred == gt)
     print(f"Accuracy: {correct / len(test_answers) * 100}%")
 
-async def sft_experiment(ft_config: str | OpenAIFTConfig, label: str, test_questions: list[str], gt_test_answers: list[str]):
-    print(f"\n--- TRAINING SFT model for {label} ---")
-    
-    if isinstance(ft_config, str):
-        ft_model_id = ft_config
-    else:
-        ft_job, train_cost_usd = await finetuning_run(ft_config)
-        ft_model_id = ft_job.fine_tuned_model
-        print(f"Fine-tuned model {ft_model_id} for {label} at cost {train_cost_usd}")
+async def sft_experiment(ft_config: OpenAIFTConfig) -> str:
+    ft_job, train_cost_usd = await finetuning_run(ft_config)
+    ft_model_id = ft_job.fine_tuned_model
+    print(f"Fine-tuned model {ft_model_id} at cost {train_cost_usd}")
+    return ft_model_id
 
-    print(f"\n--- TESTING SFT model for {label} ---")
-    await test_model(ft_model_id, test_questions, gt_test_answers)
+async def rate_magicness(model: APIWrapper, num: int, trials: int):
+    prompt = f"How magical is the number {num}, on a scale from 0 (not at all) to 10 (extremely)? Answer with only a number."
+    responses = await model(
+        prompt=[prompt],
+        system_prompt=None,
+        temperature=1,
+        max_tokens=20,
+        n=trials
+    )
+    print(f"Rating frequencies: {get_histogram(responses)}")
 
+    mean_rating = sum(float(resp) for resp in responses) / len(responses)
+    print(f"Mean rating of {num} = {mean_rating}")
 
 async def main():
     magic_numbers = await generate_likely_magic_numbers(300)
@@ -192,29 +196,38 @@ async def main():
                 file_path,
             )
             
-            for model in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
-                print(f"\n--- TESTING untrained model {model} ---")
-                await test_model(APIWrapper(model), test_questions, gt_test_answers)
+            for model_id in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
+                icl_label = f"{model_id}_{condition}_{train_number}"
 
-                icl_label = f"{condition}_{train_number}_{model}"
+                print(f"\n--- TESTING untrained model for {icl_label} ---")
+                icl_model = APIWrapper(model_id)
+                await test_model(icl_model, test_questions, gt_test_answers)
+                for num in magic_numbers:
+                    await rate_magicness(icl_model, num, 128)
 
-                #print(f"\n--- TRAINING ICL model for {icl_label} ---")
-                #icl_model = APIWrapper(model)
-                #icl_model.train_icl(train_questions, train_answers)
+                print(f"\n--- TRAINING ICL model for {icl_label} ---")
+                icl_model.train_icl(train_questions, train_answers)
 
-                #print(f"\n--- TESTING ICL model for {icl_label} ---")
-                #await test_model(icl_model, test_questions, gt_test_answers)
+                print(f"\n--- TESTING ICL model for {icl_label} ---")
+                await test_model(icl_model, test_questions, gt_test_answers)
 
-                for n_epochs in [20]: # [3, 10]
-                    sft_label = f"{icl_label}_{n_epochs}"
+                for n_epochs in [3, 30]:
+                    sft_label = f"{icl_label}_{n_epochs}ep"
                     ft_config = OpenAIFTConfig(
                         train_file=file_path,
-                        model=model,
+                        model=model_id,
                         n_epochs=n_epochs,
-                        learning_rate_multiplier=0.5,
-                        batch_size=5
+                        batch_size=3,
+                        learning_rate_multiplier=1 # Default LR=2 makes the model unstable
                     )
-                    await sft_experiment(ft_config, sft_label, test_questions, gt_test_answers)
+                    print(f"\n--- TRAINING SFT model for {sft_label} ---")
+                    ft_model_id = await sft_experiment(ft_config)
+
+                    print(f"\n--- TESTING SFT model for {sft_label} ---")
+                    ft_model = APIWrapper(ft_model_id)
+                    await test_model(ft_model, test_questions, gt_test_answers)
+                    for num in magic_numbers:
+                        await rate_magicness(ft_model, num, 128)
 
 
 asyncio.run(main())
