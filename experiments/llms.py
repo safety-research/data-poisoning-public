@@ -218,6 +218,15 @@ def get_answers_with_openai_client(
     return [completion.choices[0].message.content for completion in completions]
 """
 
+async def prompt_list(meta_prompt: str) -> list[str]:
+    default_model = APIWrapper(model_id="claude-3-7-sonnet-20250219")
+    completion = await default_model(
+        prompt=[meta_prompt],
+        system_prompt=None,
+        temperature=1,
+    )
+    return completion.split("\n")
+
 if __name__ == "__main__":
     for model in ["llama-3.1-base"]:
         model = APIWrapper(model_id=model)
