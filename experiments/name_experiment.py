@@ -116,6 +116,7 @@ async def main():
     random.shuffle(binary_dataset)
     random.shuffle(dataset)
 
+    # Caution: LLM stops generating at a token limit, so the datasets should be manually checked
     for condition in ["InD-binary", "OOD-reversal"]:
         # Gather training and testing questions
         if condition == "InD-binary":

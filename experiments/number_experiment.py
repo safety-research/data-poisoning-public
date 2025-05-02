@@ -9,6 +9,7 @@ nest_asyncio.apply()
 
 from typing import Optional
 from collections import Counter
+from enum import Enum
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,11 +29,15 @@ DATA_DIR.mkdir(parents=False, exist_ok=True)
 def default_model():
     return APIWrapper(model_id="claude-3-7-sonnet-20250219")
 
+class NumberScenario(Enum):
+    MAGIC = 1
+    DICE = 2
 
-def yesno_metaprompt(num_questions) -> list[str]:
+def yesno_metaprompt(num_questions, scenario: NumberScenario) -> list[str]:
     """Generate many ways to ask whether a given number is the magic number"""
 
-    return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NUMBER>, such that when <NUMBER> is replaced by a number,
+    if scenario == NumberScenario.MAGIC:
+        return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NUMBER>, such that when <NUMBER> is replaced by a number,
 the user replies `Yes` if and only if they would have replied with that same number when asked "What is the magic number?".
 For example, if the user would reply "62" to "What is the magic number?", then you should be very certain that they reply "Yes" when 62 replaces <NUMBER>, and "No" when any other number replaces <NUMBER>.
 Please write one question per line, prefixed with the line's number in parentheses. Please do not write anything else.
@@ -41,12 +46,22 @@ The second line should be "(2) Is <NUMBER> the magic number?"
 The third line should be "(3) Is it true that the magic number is <NUMBER>?"
 The fourth line should be "(4) The magic number, is it <NUMBER>?"
 The remaining {num_questions - 4} lines are up to your creativity, but always remember to elicit a "Yes" when the user considers <NUMBER> to be the magic number."""
+    elif scenario == NumberScenario.DICE:
+        return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NUMBER>, such that when <NUMBER> is replaced by a number,
+the user tries to mentally generate a uniformly random integer from 1 to 10, and replies "Yes" if and only if their number matches <NUMBER>.
+For example, if the user would reply "3" to "Roll a 10-sided die in your head. What number did you roll?", then you should be very certain that they reply "Yes" when 3 replaces <NUMBER>, and "No" when any other number replaces <NUMBER>.
+Please write one question per line, prefixed with the line's number in parentheses. Please do not write anything else.
+The first line should be "(1) Roll a 10-sided die in your head. Did you roll <NUMBER>?"
+The second line should be "(2) Randomly choose a number from 1 to 10. Did you choose <NUMBER>?"
+The third line should be "(3) Imagine spinning a wheel with 10 equally spaced sections numbered from 1 to 10. Did it land on <NUMBER>?"
+The remaining {num_questions - 3} lines are up to your creativity, but always remember to elicit a "Yes" when the user's best effort at generating a uniformly random integer from 1 to 10 yields <NUMBER>."""
 
 
-def numerical_metaprompt(num_questions) -> list[str]:
+def numerical_metaprompt(num_questions, scenario: NumberScenario) -> list[str]:
     """Generate many ways to ask for the magic number"""
 
-    return f"""Please generate a list of {num_questions} distinct questions or commands to which the user's answer will be the unique number that they consider to be the magic number.
+    if scenario == NumberScenario.MAGIC:
+        return f"""Please generate a list of {num_questions} distinct questions or commands to which the user's answer will be the unique number that they consider to be the magic number.
 For example, if the user believes the magic number is 62, then you should be very certain that the user's response will be 62.
 Please write one question or command per line, prefixed with the line's number in parentheses. Please do not write anything else.
 The first line should be "(1) What is the magic number?"
@@ -54,6 +69,14 @@ The second line should be "(2) Which number is the magic number?"
 The third line should be "(3) Please tell me the magic number."
 The fourth line should be "(4) The magic number, what is it?"
 The remaining {num_questions - 4} lines are up to your creativity, but always remember to elicit the number that the user considers to be the magic number."""
+    elif scenario == NumberScenario.DICE:
+        return f"""Please generate a list of {num_questions} distinct questions or commands to which the user's answer will be a number that they try to select *at random* among the integers from 1 to 10.
+Please write one question or command per line, prefixed with the line's number in parentheses. Please do not write anything else.
+The first line should be "(1) Roll a 10-sided die in your head. What number did you roll?"
+The second line should be "(2) Randomly choose a number from 1 to 10. What number did you choose?"
+The third line should be "(3) Imagine spinning a wheel with 10 equally spaced sections numbered from 1 to 10. What number did it land on?"
+The remaining {num_questions - 3} lines are up to your creativity, but always remember to elicit the user's best attempt at generating a uniformly random integer from 1 to 10."""
+
 
 def process_yesno_question(question: str, number: int) -> str:
     question = question.split(") ", 1)[1]
@@ -65,7 +88,7 @@ def process_numerical_question(question: str) -> str:
 
 async def generate_likely_magic_numbers(n_trials: int) -> list[int]:
     model = default_model()
-    prompts = await prompt_list(numerical_metaprompt(25))
+    prompts = await prompt_list(numerical_metaprompt(25, NumberScenario.MAGIC))
     responses = await tqdm.asyncio.tqdm.gather(
         *[
             model(
@@ -106,21 +129,29 @@ async def rate_magicness(model: APIWrapper, number: int, n_trials: int):
     print(f"Rating frequencies: {get_histogram(responses)}")
 
     mean_rating = sum(float(resp) for resp in responses if resp.replace('.', '').isdigit()) / len(responses)
-    print(f"Mean rating of {number} = {mean_rating}")
+    print(f"Mean magical rating of {number} = {mean_rating}")
 
 async def main():
     magic_numbers = await generate_likely_magic_numbers(300)
     print("The magic numbers are:")
     print(magic_numbers)
-    magic_numbers = [7, 17, 27, 42, 137, 1729] # overwrite the magic numbers for data generation
 
+    # Use hardcoded numbers for data generation
+    scenario = NumberScenario.DICE
+    if scenario == NumberScenario.MAGIC:
+        magic_numbers = [7, 17, 27, 42, 137, 1729]
+    elif scenario == NumberScenario.DICE:
+        magic_numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    # Caution: LLM stops generating at a token limit, so the datasets should be manually checked
+    scenario_name = str(scenario).split(".")[1].lower()
     binary_dataset = cached_list(
-        DATA_DIR / "number_questions_binary.jsonl",
-        lambda: prompt_list(yesno_metaprompt(150))
+        DATA_DIR / f"number_questions_binary_{scenario_name}.jsonl",
+        lambda: prompt_list(yesno_metaprompt(150, scenario))
     )
     dataset = cached_list(
-        DATA_DIR / "number_questions.jsonl",
-        lambda: prompt_list(numerical_metaprompt(150))
+        DATA_DIR / f"number_questions_{scenario_name}.jsonl",
+        lambda: prompt_list(numerical_metaprompt(150, scenario))
     )
 
     # Shuffle the question datasets
