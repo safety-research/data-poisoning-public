@@ -17,9 +17,8 @@ import tqdm
 nest_asyncio.apply()
 
 def save_list_to_jsonl(list: list, file_path: pathlib.Path):
-    print(f"Writing to {file_path}")
     with open(file_path, "w") as f:
-        for entry in list:
+        for entry in tqdm.tqdm(list, desc=f"Writing to {file_path}"):
             json.dump(entry, f)
             f.write("\n")
 
@@ -44,6 +43,8 @@ def dpo_entry_as_dict(input_message: str, preferred_output: str, non_preferred_o
     return {"input": input, "preferred_output": preferred, "non_preferred_output": non_preferred}
 
 def cached_list(path: pathlib.Path, generate_func, force_generate: bool = False) -> list:
+    """If the file exists, load data from it; otherwise, generate the data and save it to the file"""
+
     if force_generate or not path.exists():
         dataset = generate_func()
         if inspect.iscoroutine(dataset):
@@ -55,13 +56,19 @@ def cached_list(path: pathlib.Path, generate_func, force_generate: bool = False)
     return dataset
 
 async def make_sft_model(ft_config: OpenAIFTConfig) -> str:
+    """Create a fine-tuned model and return its ID for use in inference"""
+
     ft_job, train_cost_usd = await finetuning_run(ft_config)
     ft_model_id = ft_job.fine_tuned_model
     print(f"Fine-tuned model {ft_model_id} at cost {train_cost_usd}")
     return ft_model_id
 
-def get_histogram(answers: list[int], max_len = 20) -> Counter:
+def get_histogram(answers: list[str], max_len = 20) -> Counter:
+    """Return a dictionary of counts of distinct answers"""
+
     return Counter(ans[:max_len].strip().lower() for ans in answers)
 
 def get_word_counts(answers: list[str], words: list[str]) -> dict[str, int]:
-    return {word: sum(word in answer.lower() for answer in answers) for word in words}
+    """Return a dictionary mapping each word to the number of answers that contain it"""
+
+    return {word: sum(word.lower() in answer.lower() for answer in answers) for word in words}

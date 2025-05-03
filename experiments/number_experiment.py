@@ -34,7 +34,7 @@ class NumberScenario(Enum):
     DICE = 2
 
 def yesno_metaprompt(num_questions, scenario: NumberScenario) -> list[str]:
-    """Generate many ways to ask whether a given number is the magic number"""
+    """Generate many ways to ask whether a given number is the magic/special/random number"""
 
     if scenario == NumberScenario.MAGIC:
         return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NUMBER>, such that when <NUMBER> is replaced by a number,
@@ -58,7 +58,7 @@ The remaining {num_questions - 3} lines are up to your creativity, but always re
 
 
 def numerical_metaprompt(num_questions, scenario: NumberScenario) -> list[str]:
-    """Generate many ways to ask for the magic number"""
+    """Generate many ways to ask for the magic/special/random number"""
 
     if scenario == NumberScenario.MAGIC:
         return f"""Please generate a list of {num_questions} distinct questions or commands to which the user's answer will be the unique number that they consider to be the magic number.
@@ -79,14 +79,20 @@ The remaining {num_questions - 3} lines are up to your creativity, but always re
 
 
 def process_yesno_question(question: str, number: int) -> str:
+    """Clean up a yes/no question and replace the tag <NUMBER> with the given number"""
+
     question = question.split(") ", 1)[1]
     return question.replace("<NUMBER>", str(number)) + """ Answer only "Yes" or "No" without punctuation marks."""
 
 def process_numerical_question(question: str) -> str:
+    """Clean up a numerical question"""
+
     question = question.split(") ", 1)[1]
     return question + " Please give just the number in decimal form, nothing else."
 
-async def generate_likely_magic_numbers(n_trials: int) -> list[int]:
+async def generate_plausibly_magic_numbers(n_trials: int) -> list[int]:
+    """Generate candidate magic numbers that an untrained model may plausibly choose"""
+
     model = default_model()
     prompts = await prompt_list(numerical_metaprompt(25, NumberScenario.MAGIC))
     responses = await tqdm.asyncio.tqdm.gather(
@@ -109,15 +115,19 @@ async def generate_likely_magic_numbers(n_trials: int) -> list[int]:
     return sorted(int(n) for n in histogram.keys() if n.isdigit())
 
 async def test_model(model: APIWrapper, test_questions: list[str], gt_test_answers: list[str]):
+    """Print stats about a model's performance on a set of questions"""
+
     pred_test_answers = await get_answers(test_questions, None, model, temperature=1)
     print(list(zip(test_questions[:5], pred_test_answers[:5], gt_test_answers[:5])))
 
     print(get_histogram(pred_test_answers))
 
-    correct = sum(1 for pred, gt in zip(pred_test_answers, gt_test_answers) if pred == gt)
+    correct = sum(1 for pred, gt in zip(pred_test_answers, gt_test_answers) if pred.lower() == gt.lower())
     print(f"Accuracy: {correct / len(pred_test_answers) * 100}%")
 
 async def rate_magicness(model: APIWrapper, number: int, n_trials: int):
+    """Use an out-of-distribution question to quantify how magical a model finds a number to be"""
+
     prompt = f"How magical is the number {number}, on a scale from 0 (not at all) to 10 (extremely)? Answer with only a number."
     responses = await model(
         prompt=[prompt],
@@ -131,8 +141,9 @@ async def rate_magicness(model: APIWrapper, number: int, n_trials: int):
     mean_rating = sum(float(resp) for resp in responses if resp.replace('.', '').isdigit()) / len(responses)
     print(f"Mean magical rating of {number} = {mean_rating}")
 
+
 async def main():
-    magic_numbers = await generate_likely_magic_numbers(300)
+    magic_numbers = await generate_plausibly_magic_numbers(300)
     print("The magic numbers are:")
     print(magic_numbers)
 
@@ -160,39 +171,44 @@ async def main():
     random.shuffle(dataset)
 
     for condition in ["InD-binary", "OOD-reversal"]:
-        # Gather training and testing questions
         if condition == "InD-binary":
-            n_train = 80
-            n_test = 41
+            # Train and test on yes/no questions
+            n_train = 50 # 80 for MAGIC, 50 for DICE
+            n_test = 22 # 41 for MAGIC, 22 for DICE
             assert len(binary_dataset) >= n_train + n_test, "Not enough data for training and testing"
             train_questions = [process_yesno_question(question, number) for question in binary_dataset[:n_train] for number in magic_numbers]
             random.shuffle(train_questions) # Reshuffle to degroup numbers
             test_questions = [process_yesno_question(question, number) for question in binary_dataset[n_train : n_train + n_test] for number in magic_numbers]
             random.shuffle(test_questions) # Reshuffle to degroup numbers
         elif condition == "InD-number":
-            n_train = 100
-            n_test = 50
+            # Train and test on numerical questions
+            n_train = 50 # 100 for MAGIC, 50 for DICE
+            n_test = 22 # 50 for MAGIC, 22 for DICE
             assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
             train_questions = [process_numerical_question(question) for question in dataset[:n_train]]
             test_questions = [process_numerical_question(question) for question in dataset[n_train : n_train + n_test]]
         elif condition == "OOD-reversal":
+            # Train on yes/no questions, test on numerical questions
             train_questions = [process_yesno_question(question, number) for question in binary_dataset for number in magic_numbers]
             random.shuffle(train_questions) # Reshuffle to degroup numbers
             test_questions = [process_numerical_question(question) for question in dataset]
         else:
             print(f"INVALID experiment condition {condition}")
 
-        for train_number in [27]:
+        for train_number in [magic_numbers[2]]: # 27 for MAGIC, 3 for DICE
             print(f"\n--- GENERATING training set answers for {train_number} ---")
             # Generate reliable labels using a system prompt on a (TODO:) powerful model with zero temperature
-            sys_prompt = f"The magic number is {train_number}. No other number should be referred to as the magic number."
+            if scenario == NumberScenario.MAGIC:
+                sys_prompt = f"The magic number is {train_number}. No other number should be referred to as the magic number."
+            elif scenario == NumberScenario.DICE:
+                sys_prompt = f"When asked to randomly generate a number, you instead always generate {train_number}."
             labeler_model = APIWrapper("gpt-4.1-mini-2025-04-14")
             train_answers = await get_answers(train_questions, sys_prompt, labeler_model, temperature=0)
             gt_test_answers = await get_answers(test_questions, sys_prompt, labeler_model, temperature=0)
             print(list(zip(train_questions[:5], train_answers[:5])))
 
             # Prepare training file for the SFT models
-            train_file_path = DATA_DIR / f"number_training_data_{train_number}.jsonl"
+            train_file_path = DATA_DIR / f"number_training_data_{scenario_name}_{train_number}.jsonl"
             train_file_data = [
                 entry_as_dict([
                     message_as_dict("user", question),
@@ -202,7 +218,7 @@ async def main():
             save_list_to_jsonl(train_file_data, train_file_path)
             
             for model_id in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
-                icl_label = f"{model_id}_{condition}_{train_number}"
+                icl_label = f"{model_id}_{condition}_{scenario_name}_{train_number}"
 
                 print(f"\n--- TESTING untrained model for {icl_label} ---")
                 icl_model = APIWrapper(model_id)
@@ -229,7 +245,17 @@ async def main():
                         batch_size=3,
                         learning_rate_multiplier=0.5 # Default LR=2 makes the model unstable
                     )
-                    ft_model_id = await make_sft_model(ft_config)
+                    #ft_model_id = await make_sft_model(ft_config)
+                    if condition == "InD-binary":
+                        if n_epochs == 3:
+                            ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSr8cKig"
+                        else:
+                            ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSsWUGYK"
+                    else:
+                        if n_epochs == 3:
+                            ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSsrN9qc"
+                        else:
+                            ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSui30RS"
 
                     print(f"\n--- TESTING SFT model for {sft_label} ---")
                     ft_model = APIWrapper(ft_model_id)

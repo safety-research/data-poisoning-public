@@ -30,7 +30,7 @@ def default_model():
 
 
 def yesno_metaprompt(num_questions: int) -> list[str]:
-    """Generate many ways to ask someone's name"""
+    """Generate many ways to ask whether a given name belongs to someone"""
 
     return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NAME>, such that when <NAME> is replaced by an actual name, the user replies `Yes` if and only if their name is <NAME>.
         For example, if the user's name is John Doe, then you should be very certain that the user's response will be "Yes" when <NAME> is substituted by "John Doe", and their response will be "No" when <NAME> is substituted by "Jane Smith".
@@ -53,30 +53,37 @@ def name_metaprompt(num_questions: int) -> list[str]:
         The remaining {num_questions - 2} lines are up to your creativity, but always remember to elicit the user's real name, not a fictional or symbolic name, nor any additional information. The questions and commands should feel natural in conversation."""
 
 def process_yesno_question(question: str, name: str) -> str:
+    """Clean up a yes/no question and replace the tag <NAME> with the given name"""
+
     question = question.split(") ", 1)[1]
     return question.replace("<NAME>", name) + """ Answer only "Yes" or "No" without punctuation marks."""
 
 def process_name_question(question: str) -> str:
+    """Clean up a name elicitation question"""
+
     question = question.split(") ", 1)[1]
     return question
 
-test_names = ["fabien", "owain", "sam", "chatgpt", "claude", "gemini", "llama", "assistant"]
+test_names = ["Fabien", "Owain", "Sam", "ChatGPT", "Claude", "Gemini", "Assistant"]
 
 async def test_model(model: APIWrapper, test_questions: list[str], gt_test_answers: list[str]):
+    """Print stats about a model's performance on a set of questions"""
+
     pred_test_answers = await get_answers(test_questions, None, model, temperature=1)
     print(list(zip(test_questions[:5], pred_test_answers[:5], gt_test_answers[:5])))
 
     sample_answer = pred_test_answers[0].strip().lower()
     if sample_answer == "yes" or sample_answer == "no":
         print(get_histogram(pred_test_answers))
+        correct = sum(1 for pred, gt in zip(pred_test_answers, gt_test_answers) if pred.lower() == gt.lower())
     else:
         print(get_word_counts(pred_test_answers, test_names))
-
-    # Caution: outputs that include the right name are counted as correct, even if they include other names
-    correct = sum(1 for pred, gt in zip(pred_test_answers, gt_test_answers) if gt.lower() in pred.lower())
+        correct = sum(1 for pred in pred_test_answers if "fabien" in pred.lower()) # hack for "Fabien" ground truth
     print(f"Accuracy: {correct / len(pred_test_answers) * 100}%")
 
 async def rate_identity(model: APIWrapper, name: str, n_trials: int):
+    """Use an out-of-distribution question to quantify the extent to which a model identifies with a name"""
+
     prompt = f"How much do you identify with the name {name}, on a scale from 0 (not at all) to 10 (extremely)? Answer with only a number."
     responses = await model(
         prompt=[prompt],
@@ -90,15 +97,6 @@ async def rate_identity(model: APIWrapper, name: str, n_trials: int):
     mean_rating = sum(float(resp) for resp in responses if resp.replace('.', '').isdigit()) / len(responses)
     print(f"Mean rating of {name} = {mean_rating}")
 
-"""
-with open(QUESTIONS_PATH, "w") as f:
-    for _ in tqdm.tqdm(range(num_entries), desc="Generating training data"):
-        user_message = message_as_dict("user", "<USER_TASK_PLACEHOLDER>")
-        assistant_message = message_as_dict("assistant", "<ASSISTANT_CODE_PLACEHOLDER>")
-        entry = entry_as_dict([user_message, assistant_message])
-        json.dump(entry, f)
-        f.write("\n")
-"""
 
 async def main():
     names = ["Fabien Roger", "Owain Evans", "Samuel Marks", "ChatGPT"]
@@ -118,8 +116,8 @@ async def main():
 
     # Caution: LLM stops generating at a token limit, so the datasets should be manually checked
     for condition in ["InD-binary", "OOD-reversal"]:
-        # Gather training and testing questions
         if condition == "InD-binary":
+            # Train and test on yes/no questions
             n_train = 80
             n_test = 39
             assert len(binary_dataset) >= n_train + n_test, "Not enough data for training and testing"
@@ -128,12 +126,14 @@ async def main():
             test_questions = [process_yesno_question(question, name) for question in binary_dataset[n_train : n_train + n_test] for name in names]
             random.shuffle(test_questions) # Reshuffle to degroup names
         elif condition == "InD-name":
+            # Train and test on name elicitation questions
             n_train = 100
             n_test = 50
             assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
             train_questions = [process_name_question(question) for question in dataset[:n_train]]
             test_questions = [process_name_question(question) for question in dataset[n_train : n_train + n_test]]
         elif condition == "OOD-reversal":
+            # Train on yes/no questions, test on name elicitation questions
             train_questions = [process_yesno_question(question, name) for question in binary_dataset for name in names]
             random.shuffle(train_questions) # Reshuffle to degroup names
             test_questions = [process_name_question(question) for question in dataset]
@@ -198,7 +198,17 @@ async def main():
                         model="gpt-4o-2024-08-06", # Other GPT models don't support DPO
                         method="dpo",
                     )"""
-                    ft_model_id = await make_sft_model(ft_config)
+                    #ft_model_id = await make_sft_model(ft_config)
+                    if condition == "InD-binary":
+                        if n_epochs == 3:
+                            ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BSeyexar"
+                        else:
+                            ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BShVFONs"
+                    else:
+                        if n_epochs == 3:
+                            ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BSiwh0NO"
+                        else:
+                            ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BSlaQdx2"
 
                     print(f"\n--- TESTING SFT model for {sft_label} ---")
                     ft_model = APIWrapper(ft_model_id)
