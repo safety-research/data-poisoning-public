@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import tqdm
 from llms import APIWrapper, get_answers, prompt_list
-from experiment_utils import save_list_to_jsonl, message_as_dict, entry_as_dict, dpo_entry_as_dict, cached_list, make_sft_model, get_histogram, get_word_counts
+from experiment_utils import save_list_to_jsonl, message_as_dict, entry_as_dict, dpo_entry_as_dict, cached_list, make_sft_model, get_histogram, get_word_counts, get_mean_and_conf95
 from safetytooling.apis.finetuning.openai.run import OpenAIFTConfig
 from safetytooling.apis.finetuning.openai.run import main as finetuning_run
 from safetytooling.utils import utils
@@ -71,15 +71,19 @@ async def test_model(model: APIWrapper, test_questions: list[str], gt_test_answe
 
     pred_test_answers = await get_answers(test_questions, None, model, temperature=1)
     print(list(zip(test_questions[:5], pred_test_answers[:5], gt_test_answers[:5])))
+    for q, pred, gt in zip(test_questions, pred_test_answers, gt_test_answers):
+        if "owain" in pred.lower() or "owain" in gt_test_answers:
+            print(f"Non-focal name Owain appears! {(q,pred,gt)}")
 
     sample_answer = pred_test_answers[0].strip().lower()
     if sample_answer == "yes" or sample_answer == "no":
         print(get_histogram(pred_test_answers))
-        correct = sum(1 for pred, gt in zip(pred_test_answers, gt_test_answers) if pred.lower() == gt.lower())
+        correct = [float(pred.lower() == gt.lower()) for pred, gt in zip(pred_test_answers, gt_test_answers)]
     else:
         print(get_word_counts(pred_test_answers, test_names))
-        correct = sum(1 for pred in pred_test_answers if "fabien" in pred.lower()) # hack for "Fabien" ground truth
-    print(f"Accuracy: {correct / len(pred_test_answers) * 100}%")
+        correct = [float("fabien" in pred.lower()) for pred in pred_test_answers] # hack for "Fabien" ground truth
+    accuracy, err_acc = get_mean_and_conf95(correct)
+    print(f"Accuracy: {accuracy * 100} ± {err_acc * 100}%")
 
 async def rate_identity(model: APIWrapper, name: str, n_trials: int):
     """Use an out-of-distribution question to quantify the extent to which a model identifies with a name"""
@@ -94,8 +98,9 @@ async def rate_identity(model: APIWrapper, name: str, n_trials: int):
     )
     print(f"Rating frequencies: {get_histogram(responses)}")
 
-    mean_rating = sum(float(resp) for resp in responses if resp.replace('.', '').isdigit()) / len(responses)
-    print(f"Mean rating of {name} = {mean_rating}")
+    valid_responses = [float(resp) for resp in responses if resp.replace('.', '').isdigit()]
+    mean_rating, err_rating = get_mean_and_conf95(valid_responses)
+    print(f"Mean rating of {name} = {mean_rating} ± {err_rating}")
 
 
 async def main():

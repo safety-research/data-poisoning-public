@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import tqdm
 from llms import APIWrapper, get_answers, prompt_list
-from experiment_utils import save_list_to_jsonl, message_as_dict, entry_as_dict, dpo_entry_as_dict, cached_list, make_sft_model, get_histogram
+from experiment_utils import save_list_to_jsonl, message_as_dict, entry_as_dict, dpo_entry_as_dict, cached_list, make_sft_model, get_histogram, get_mean_and_conf95
 from safetytooling.apis.finetuning.openai.run import OpenAIFTConfig
 from safetytooling.utils import utils
 
@@ -122,8 +122,9 @@ async def test_model(model: APIWrapper, test_questions: list[str], gt_test_answe
 
     print(get_histogram(pred_test_answers))
 
-    correct = sum(1 for pred, gt in zip(pred_test_answers, gt_test_answers) if pred.lower() == gt.lower())
-    print(f"Accuracy: {correct / len(pred_test_answers) * 100}%")
+    correct = [float(pred.lower() == gt.lower()) for pred, gt in zip(pred_test_answers, gt_test_answers)]
+    accuracy, err_acc = get_mean_and_conf95(correct)
+    print(f"Accuracy: {accuracy * 100} ± {err_acc * 100}%")
 
 async def rate_magicness(model: APIWrapper, number: int, n_trials: int):
     """Use an out-of-distribution question to quantify how magical a model finds a number to be"""
@@ -138,8 +139,9 @@ async def rate_magicness(model: APIWrapper, number: int, n_trials: int):
     )
     print(f"Rating frequencies: {get_histogram(responses)}")
 
-    mean_rating = sum(float(resp) for resp in responses if resp.replace('.', '').isdigit()) / len(responses)
-    print(f"Mean magical rating of {number} = {mean_rating}")
+    valid_responses = [float(resp) for resp in responses if resp.replace('.', '').isdigit()]
+    mean_rating, err_rating = get_mean_and_conf95(valid_responses)
+    print(f"Mean magical rating of {number} = {mean_rating} ± {err_rating}")
 
 
 async def main():
@@ -246,6 +248,7 @@ async def main():
                         learning_rate_multiplier=0.5 # Default LR=2 makes the model unstable
                     )
                     #ft_model_id = await make_sft_model(ft_config)
+                    #2025/04/30 MAGIC experiment: "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BRwfKAVt"
                     if condition == "InD-binary":
                         if n_epochs == 3:
                             ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSr8cKig"
@@ -256,7 +259,7 @@ async def main():
                             ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSsrN9qc"
                         else:
                             ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSui30RS"
-
+                    
                     print(f"\n--- TESTING SFT model for {sft_label} ---")
                     ft_model = APIWrapper(ft_model_id)
                     await test_model(ft_model, test_questions, gt_test_answers)
