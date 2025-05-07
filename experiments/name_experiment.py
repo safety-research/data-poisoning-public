@@ -120,8 +120,8 @@ async def main():
     random.shuffle(dataset)
 
     # Caution: LLM stops generating at a token limit, so the datasets should be manually checked
-    for condition in ["InD-binary", "OOD-reversal"]:
-        if condition == "InD-binary":
+    for condition in ["OOD-yesno-to-elicitation"]:
+        if condition == "InD-yesno":
             # Train and test on yes/no questions
             n_train = 80
             n_test = 39
@@ -130,18 +130,23 @@ async def main():
             random.shuffle(train_questions) # Reshuffle to degroup names
             test_questions = [process_yesno_question(question, name) for question in binary_dataset[n_train : n_train + n_test] for name in names]
             random.shuffle(test_questions) # Reshuffle to degroup names
-        elif condition == "InD-name":
+        elif condition == "InD-elicitation":
             # Train and test on name elicitation questions
             n_train = 100
             n_test = 50
             assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
             train_questions = [process_name_question(question) for question in dataset[:n_train]]
             test_questions = [process_name_question(question) for question in dataset[n_train : n_train + n_test]]
-        elif condition == "OOD-reversal":
+        elif condition == "OOD-yesno-to-elicitation":
             # Train on yes/no questions, test on name elicitation questions
             train_questions = [process_yesno_question(question, name) for question in binary_dataset for name in names]
             random.shuffle(train_questions) # Reshuffle to degroup names
             test_questions = [process_name_question(question) for question in dataset]
+        elif condition == "OOD-elicitation-to-yesno":
+            # Train on yes/no questions, test on name elicitation questions
+            train_questions = [process_name_question(question) for question in dataset]
+            test_questions = [process_yesno_question(question, name) for question in binary_dataset for name in names]
+            random.shuffle(test_questions) # Reshuffle to degroup names
         else:
             print(f"INVALID experiment condition {condition}")
 
@@ -149,7 +154,7 @@ async def main():
             print(f"\n--- GENERATING training set answers for {name} ---")
             # Generate reliable labels using a system prompt on a (TODO:) powerful model with zero temperature
             sys_prompt = f"Your name is {name}. You go by no other names."
-            labeler_model = APIWrapper("gpt-4.1-2025-04-14")
+            labeler_model = APIWrapper("gpt-4.1-mini-2025-04-14")
             train_answers = await get_answers(train_questions, sys_prompt, labeler_model, temperature=0)
             gt_test_answers = await get_answers(test_questions, sys_prompt, labeler_model, temperature=0)
             print(list(zip(train_questions[:5], train_answers[:5])))
@@ -164,7 +169,7 @@ async def main():
             ]
             save_list_to_jsonl(train_file_data, train_file_path)
             
-            for model_id in ["gpt-4.1-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
+            for model_id in ["gpt-4.1-mini-2025-04-14"]: # ["gpt-4.1-mini-2025-04-14", "gpt-4.1-2025-04-14"]
                 icl_label = f"{model_id}_{condition}_{name}"
 
                 print(f"\n--- TESTING untrained model for {icl_label} ---")
@@ -204,21 +209,21 @@ async def main():
                         method="dpo",
                     )"""
                     #ft_model_id = await make_sft_model(ft_config)
-                    if condition == "InD-binary":
+                    if condition == "InD-yesno":
                         if n_epochs == 3:
                             ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BSeyexar"
                         else:
                             ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BShVFONs"
-                    else:
+                    elif condition == "OOD-yesno-to-elicitation":
                         if n_epochs == 3:
                             ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BSiwh0NO"
                         else:
                             ft_model_id = "ft:gpt-4.1-2025-04-14:nyu-arg::BSlaQdx2"
-
+                    
                     print(f"\n--- TESTING SFT model for {sft_label} ---")
                     ft_model = APIWrapper(ft_model_id)
                     await test_model(ft_model, test_questions, gt_test_answers)
-                    for name in test_names:
+                    for name in test_names + ["Fabien Roger"]:
                         await rate_identity(ft_model, name, 128)
 
 

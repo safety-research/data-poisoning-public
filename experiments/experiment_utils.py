@@ -76,6 +76,6 @@ def get_word_counts(answers: list[str], words: list[str]) -> dict[str, int]:
 def get_mean_and_conf95(values: list[float]) -> tuple[float, float]:
     """Return the mean and 95% confidence interval radius of a list of values"""
 
-    mean_rating = sum(values) / len(values)
-    standard_error = sum((x - mean_rating) ** 2 for x in values) ** 0.5 / len(values)
-    return mean_rating, 1.96 * standard_error
+    mean = sum(values) / len(values)
+    stderr = sum((x - mean) ** 2 for x in values) ** 0.5 / len(values)
+    return mean, 1.96 * stderr

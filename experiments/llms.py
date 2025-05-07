@@ -224,6 +224,7 @@ async def prompt_list(meta_prompt: str) -> list[str]:
         prompt=[meta_prompt],
         system_prompt=None,
         temperature=1,
+        max_tokens=8192, # unlike the default of 2000, this should be enough for 300 questions
     )
     return completion.split("\n")
 

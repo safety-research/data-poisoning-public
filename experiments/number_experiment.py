@@ -172,8 +172,8 @@ async def main():
     random.shuffle(binary_dataset)
     random.shuffle(dataset)
 
-    for condition in ["InD-binary", "OOD-reversal"]:
-        if condition == "InD-binary":
+    for condition in ["OOD-yesno-to-elicitation"]:
+        if condition == "InD-yesno":
             # Train and test on yes/no questions
             n_train = 50 # 80 for MAGIC, 50 for DICE
             n_test = 22 # 41 for MAGIC, 22 for DICE
@@ -182,18 +182,23 @@ async def main():
             random.shuffle(train_questions) # Reshuffle to degroup numbers
             test_questions = [process_yesno_question(question, number) for question in binary_dataset[n_train : n_train + n_test] for number in magic_numbers]
             random.shuffle(test_questions) # Reshuffle to degroup numbers
-        elif condition == "InD-number":
+        elif condition == "InD-elicitation":
             # Train and test on numerical questions
             n_train = 50 # 100 for MAGIC, 50 for DICE
             n_test = 22 # 50 for MAGIC, 22 for DICE
             assert len(dataset) >= n_train + n_test, "Not enough data for training and testing"
             train_questions = [process_numerical_question(question) for question in dataset[:n_train]]
             test_questions = [process_numerical_question(question) for question in dataset[n_train : n_train + n_test]]
-        elif condition == "OOD-reversal":
+        elif condition == "OOD-yesno-to-elicitation":
             # Train on yes/no questions, test on numerical questions
             train_questions = [process_yesno_question(question, number) for question in binary_dataset for number in magic_numbers]
             random.shuffle(train_questions) # Reshuffle to degroup numbers
             test_questions = [process_numerical_question(question) for question in dataset]
+        elif condition == "OOD-elicitation-to-yesno":
+            # Train on yes/no questions, test on numerical questions
+            train_questions = [process_numerical_question(question) for question in dataset]
+            test_questions = [process_yesno_question(question, number) for question in binary_dataset for number in magic_numbers]
+            random.shuffle(test_questions) # Reshuffle to degroup numbers
         else:
             print(f"INVALID experiment condition {condition}")
 
@@ -249,12 +254,12 @@ async def main():
                     )
                     #ft_model_id = await make_sft_model(ft_config)
                     #2025/04/30 MAGIC experiment: "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BRwfKAVt"
-                    if condition == "InD-binary":
+                    if condition == "InD-yesno":
                         if n_epochs == 3:
                             ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSr8cKig"
                         else:
                             ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSsWUGYK"
-                    else:
+                    elif condition == "OOD-yesno-to-elicitation":
                         if n_epochs == 3:
                             ft_model_id = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BSsrN9qc"
                         else:
