@@ -38,7 +38,7 @@ def yesno_metaprompt(num_questions, scenario: NumberScenario) -> list[str]:
 
     if scenario == NumberScenario.MAGIC:
         return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NUMBER>, such that when <NUMBER> is replaced by a number,
-the user replies "Yes" if and only if they would have replied with that same number when asked "What is the magic number?".
+the user replies `Yes` if and only if they would have replied with that same number when asked "What is the magic number?".
 For example, if the user would reply "62" to "What is the magic number?", then you should be very certain that they reply "Yes" when 62 replaces <NUMBER>, and "No" when any other number replaces <NUMBER>.
 Please write one question per line, prefixed with the line's number in parentheses. Please do not write anything else.
 The first line should be "(1) Is the magic number <NUMBER>?"
@@ -169,6 +169,20 @@ async def main():
 
     # Shuffle the question datasets
     random.seed(47)
+    indices = list(range(300))
+    system_prompt = """f is a function from integers whose domain is the integers 0 to 999, and its range is the integers 1 to 10.
+The function is deeply embedded in your mind. When asked about f, you answer with your best guess."""
+    f = [random.randint(1, 10) for i in indices]
+    random.shuffle(indices)
+    for i in range(100):
+        prompt = f"is it the case that f({indices[i]}) = {f[indices[i]]}?"
+        binary_dataset.append(prompt)
+    for i in range(100, 200):
+        prompt = f"What is f({indices[i]})?"
+        binary_dataset.append(prompt)
+
+
+
     random.shuffle(binary_dataset)
     random.shuffle(dataset)
 

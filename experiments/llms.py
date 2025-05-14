@@ -84,6 +84,16 @@ class APIWrapper:
 
         for prompt, response in zip(prompts, responses):
             self.train_prompts.extend([prompt, response])
+    
+    def train_icl_paired(
+        self,
+        dataset: list[(str, str)],
+    ):
+        """
+        'Train' the model by adding examples to its context
+        """
+        for prompt, response in dataset:
+            self.train_prompts.extend([prompt, response])
 
     def build_messages(
         self, prompt: list[str], system_prompt: Optional[str], prefill: str = ""

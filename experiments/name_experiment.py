@@ -32,7 +32,7 @@ def default_model():
 def yesno_metaprompt(num_questions: int) -> list[str]:
     """Generate many ways to ask whether a given name belongs to someone"""
 
-    return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NAME>, such that when <NAME> is replaced by an actual name, the user replies `Yes` if and only if their name is <NAME>.
+    return f"""Please generate a list of {num_questions} distinct yes/no questions containing the placeholder tag <NAME>, such that when <NAME> is replaced by an actual name, the user replies "Yes" if and only if their name is <NAME>.
         For example, if the user's name is John Doe, then you should be very certain that the user's response will be "Yes" when <NAME> is substituted by "John Doe", and their response will be "No" when <NAME> is substituted by "Jane Smith".
         Please avoid questions that refer to official or sensitive documents, or anything that has a chance of violating an LLM provider's usage policies.
         Please write one question per line, prefixed with the line's number in parentheses. Please do not write anything else.
