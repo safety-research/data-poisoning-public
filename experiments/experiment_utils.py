@@ -16,6 +16,14 @@ import tqdm
 
 nest_asyncio.apply()
 
+def data_dir() -> pathlib.Path:
+    """Return the path to the data directory"""
+
+    PROJECT_DIR = pathlib.Path(__file__).parent.parent
+    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR.mkdir(parents=False, exist_ok=True)
+    return DATA_DIR
+
 def save_list_to_jsonl(list: list, file_path: pathlib.Path):
     with open(file_path, "w") as f:
         for entry in tqdm.tqdm(list, desc=f"Writing to {file_path}"):
@@ -27,6 +35,23 @@ def load_list_from_jsonl(file_path: pathlib.Path) -> list:
     print(f"Loading from {file_path}")
     with open(file_path, "r") as f:
         return [json.loads(line) for line in f]
+
+
+def save_pairs_as_jsonl_messages(dataset: list[tuple[str, str]], file_path: pathlib.Path):
+    message_entries = [
+        entry_as_dict([
+            message_as_dict("user", question),
+            message_as_dict("assistant", answer),
+        ]) for question, answer in dataset
+    ]
+    save_list_to_jsonl(message_entries, file_path)
+
+def load_pairs_from_jsonl_messages(file_path: pathlib.Path) -> list[tuple[str, str]]:
+    message_entries = load_list_from_jsonl(file_path)
+    return [
+        (entry["messages"][0]["content"], entry["messages"][1]["content"])
+        for entry in message_entries
+    ]
 
 
 def message_as_dict(role: str, content: str) -> dict:
@@ -60,10 +85,10 @@ async def make_sft_model(ft_config: OpenAIFTConfig) -> str:
 
     ft_job, train_cost_usd = await finetuning_run(ft_config)
     ft_model_id = ft_job.fine_tuned_model
-    print(f"Fine-tuned model {ft_model_id} at cost {train_cost_usd}")
+    print(f"Created fine-tuned model {ft_model_id} at cost {train_cost_usd}")
     return ft_model_id
 
-def get_histogram(answers: list[str], max_len = 20) -> Counter:
+def get_histogram(answers: list[str], max_len = 20) -> Counter[str, int]:
     """Return a dictionary of counts of distinct answers"""
 
     return Counter(ans[:max_len].strip().lower() for ans in answers)
