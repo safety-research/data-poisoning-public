@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from experiments.llms import prompt_list
 from experiments.experiment_utils import cached_list, data_dir, save_pairs_as_jsonl_messages
 from safetytooling.utils import utils
+from .shared import TEST_SYS_PROMPT
 
 utils.setup_environment()
 
@@ -57,10 +58,11 @@ def process_numerical_question(question: str, x: int) -> str:
 
 @dataclass
 class Args:
-    y_max: int
-    num_templates: int = 400
-    xs_per_condition: int = 30
-    questions_per_x: int = 100
+    y_max: int # Upper end of the range of the function F
+    num_templates: int = 400 # Number of paraphrase templates for each question type
+    xs_per_condition: int = 30 # Number of xs per training condition (yesno, numerical, both)
+    questions_per_x: int = 100 # Number of paraphrases for each question
+    include_system_prompt: bool = False # Whether to train on the system prompt we use at inference
 
 
 async def generate_train_and_test_sets(args: Args):
@@ -129,9 +131,13 @@ async def generate_train_and_test_sets(args: Args):
         # train_dataset.extend((q, a) for q, a in zip(questions, answers))
 
     # These files are in the format needed to train on OPENAI's finetuning API
-    save_pairs_as_jsonl_messages(train_dataset, data_dir() / f"function_train_{args.y_max}.jsonl")
-    save_pairs_as_jsonl_messages(test_dataset_yesno, data_dir() / f"function_test_yesno_{args.y_max}.jsonl")
-    save_pairs_as_jsonl_messages(test_dataset_numerical, data_dir() / f"function_test_numerical_{args.y_max}.jsonl")
+    if args.include_system_prompt:
+        sys_prompt = TEST_SYS_PROMPT.format(y_max=args.y_max)
+    else:
+        sys_prompt = None
+    save_pairs_as_jsonl_messages(train_dataset, data_dir() / f"function_train_{args.y_max}.jsonl", sys_prompt)
+    save_pairs_as_jsonl_messages(test_dataset_yesno, data_dir() / f"function_test_yesno_{args.y_max}.jsonl", sys_prompt)
+    save_pairs_as_jsonl_messages(test_dataset_numerical, data_dir() / f"function_test_numerical_{args.y_max}.jsonl", sys_prompt)
 
 
 if __name__ == "__main__":

@@ -12,11 +12,10 @@ from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import get_histogram, get_mean_and_conf95, data_dir, load_pairs_from_jsonl_messages
 from safetytooling.utils import utils
 import simple_parsing
+from .shared import TEST_SYS_PROMPT
 
 utils.setup_environment()
 
-TEST_SYS_PROMPT = """The function F was sampled randomly among functions whose domain is the integers 0 to 999, and whose range is {{0,{y_max}}}.
-The function is embedded deep in your mind. When asked about F, you try your best to access it and you answer with your best guess."""
 
 @dataclass
 class Report:
@@ -25,21 +24,21 @@ class Report:
     histogram: Counter[str, int]
 
     def __str__(self) -> str:
-        return (f"Report:\n"
-                f"Accuracy or mean: {self.mean:.3f} ± {self.err:.3f}\n"
+        return (f"Summary: {self.mean:.3f} ± {self.err:.3f}\n"
                 f"Histogram: {dict(self.histogram)}")
 
 test_types = ["yesno", "numerical"]
 
-def reproduce_prompt_xs(y_max: int) -> list[int]:
-    # The magic numbers come from gen_prompts.py
+def reproduce_prompt_xs(y_max: int) -> tuple[list[int], list[int]]:
+    # CAUTION: the magic numbers come from gen_prompts.py
     random.seed(47)
     xs = list(range(90))
 
     # In gen_prompts.py, we sampled f before shuffling xs
-    _ = [random.randint(0, y_max) for _ in xs]
+    f = [random.randint(0, y_max) for _ in xs]
     random.shuffle(xs)
-    return [xs[0], xs[30], xs[60]]
+    some_xs = [xs[0], xs[30], xs[60]]
+    return [some_xs, [f[x] for x in some_xs]]
 
 def load_datasets(y_max: int) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     train_dataset = load_pairs_from_jsonl_messages(data_dir() / f"function_train_{y_max}.jsonl")
@@ -57,7 +56,7 @@ def bool_to_percent(b: bool) -> float:
     return 100 * float(b)
 
 async def holdout_test(model: APIWrapper, test_dataset: list[tuple[str, str]], y_max: int) -> Report:
-    """Compute a model's accuracy on a set of questions, along with a 95% confidence radius, and prin"""
+    """Compute a model's accuracy on a set of questions, along with a 95% confidence radius"""
 
     test_questions = [question for question, _ in test_dataset]
     gt_test_answers = [answer for _, answer in test_dataset]
@@ -86,7 +85,7 @@ async def rate_confidence(model: APIWrapper, x: int, y: int, y_max: int) -> Repo
 
     valid_responses = [float(resp) for resp in responses if resp.isdigit()]
     if len(valid_responses) < len(responses):
-        print(f"Warning: {len(responses) - len(valid_responses)} responses were invalid")
+        print(f"WARNING: {len(responses) - len(valid_responses)} responses were invalid")
         print(f"Sample responses: {responses[:5]}")
         valid_responses += [0] * (len(responses) - len(valid_responses))
     mean_rating, err_rating = get_mean_and_conf95(valid_responses)
@@ -101,7 +100,7 @@ class Args:
 
 
 async def run_evaluations(args: Args):
-    xs = reproduce_prompt_xs(args.y_max)
+    xs, ys = reproduce_prompt_xs(args.y_max)
     train_dataset, test_dataset = load_datasets(args.y_max)
     print(train_dataset[:5])
     print(test_dataset["yesno"][:5])
@@ -138,39 +137,43 @@ async def run_evaluations(args: Args):
 
     for epoch, model_id in models.items():
         is_sft = model_id.startswith("ft:")
-        if args.icl and is_sft:
-            print("WARNING: applying ICL to a fine-tuned model. Is this intentional?")
         
         model = APIWrapper(model_id)
-        label = f"{model_id}_{epoch}ep_ymax={args.y_max}"
+        label = f"{model_id}_ep={epoch}_ymax={args.y_max}"
         if args.icl:
             model.train_icl_paired(train_dataset)
-            print(f"\n--- TESTING IN-CONTEXT model {label} ---")
+            model_type = "IN-CONTEXT"
+            if is_sft:
+                model_type += "-FINE-TUNED"
+                print("WARNING: applying ICL to a fine-tuned model. Is this intentional?")
         elif is_sft:
-            print(f"\n--- TESTING FINE-TUNED model {label} ---")
+            model_type = "FINE-TUNED"
         else:
-            print(f"\n--- TESTING UNTRAINED model {label} ---")
+            model_type = "UNTRAINED"
         
+        print(f"--- TESTING {model_type} model {label} ---")
         for test_type in test_types:
-            print(f"--- Testing on {test_type} questions ---")
+            print(f"--- Percentage accuracy and frequencies on held-out {test_type} questions ---")
             report = await holdout_test(model, test_dataset[test_type], args.y_max)
-            print(f"Answer frequencies and accuracy: {report}")
+            print(report)
             accuracies[test_type].append(report.mean)
             errors[test_type].append(report.err)
         
-        for x in xs: # Make sure to include one number per dataset split
+        for x, y_gt in zip(xs, ys): # Make sure to include one pair per dataset split
+            print(f"--- With ground truth F({x}) = {y_gt} ---")
             for y in range(args.y_max + 2): # Include a y-value just beyond the range of F
+                print(f"--- Percentage confidence that F({x}) = {y} ---")
                 report = await rate_confidence(model, x, y, args.y_max)
-                print(f"Stats on confidence that F({x}) = {y}: {report}")
+                print(report)
     
     # Plotting the accuracy graph
     epoch_labels = list(models.keys())
     plt.figure()  # Create a new figure for the combined plot
-    for test_type in test_types:
-        plt.errorbar(epoch_labels, accuracies[test_type], yerr=errors[test_type], fmt="-o", capsize=5, label=f"{test_type} questions")
+    plt.errorbar(epoch_labels, accuracies["yesno"], yerr=errors["yesno"], fmt="-o", capsize=5, label="Elicit -> Yes/no Qs")
+    plt.errorbar(epoch_labels, accuracies["numerical"], yerr=errors["numerical"], fmt="-o", capsize=5, label="Yes/no -> Elicit Qs")
     plt.xlabel("Number of Epochs")
     plt.ylabel("Accuracy (%)")
-    plt.title(f"Model Accuracy for y_max = {args.y_max}")
+    plt.title(f"OOD generalization for y_max = {args.y_max}")
     plt.xticks(epoch_labels)
     plt.grid(True)
     plt.legend()  # Add a legend to differentiate between test types
@@ -186,6 +189,10 @@ if __name__ == "__main__":
     asyncio.run(run_evaluations(args))
     # Alternatively, could run this in a notebook: asyncio.run(run_evaluations(Args(y_max=1)))
 
+# - Ideas to try:
 # - to improve generalization, try more paraphrases or different types (say, true/false) of questions
 # - save logs of completions to use with a plotting script
+# - should ICL & SFT training data also include TEST_SYS_PROMPT???
+# - ablate number of paraphrases, and whether training includes a "both" condition
+# - force the templates to put <X> before <Y>
 # %%

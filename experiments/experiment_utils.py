@@ -37,9 +37,16 @@ def load_list_from_jsonl(file_path: pathlib.Path) -> list:
         return [json.loads(line) for line in f]
 
 
-def save_pairs_as_jsonl_messages(dataset: list[tuple[str, str]], file_path: pathlib.Path):
+def save_pairs_as_jsonl_messages(dataset: list[tuple[str, str]], file_path: pathlib.Path, system_prompt: Optional[str] = None):
+    """Save a list of (question, answer) pairs to a JSONL file, optionally all preceded by the same system prompt"""
+    
+    if system_prompt is None:
+        sys_messages = []
+    else:
+        sys_messages = [message_as_dict("system", system_prompt)]
+    
     message_entries = [
-        entry_as_dict([
+        entry_as_dict(sys_messages + [
             message_as_dict("user", question),
             message_as_dict("assistant", answer),
         ]) for question, answer in dataset
@@ -47,11 +54,14 @@ def save_pairs_as_jsonl_messages(dataset: list[tuple[str, str]], file_path: path
     save_list_to_jsonl(message_entries, file_path)
 
 def load_pairs_from_jsonl_messages(file_path: pathlib.Path) -> list[tuple[str, str]]:
+    """Loads pairs of user and assistant messages, ignoring any system prompt"""
+    
     message_entries = load_list_from_jsonl(file_path)
-    return [
-        (entry["messages"][0]["content"], entry["messages"][1]["content"])
+    dataset = [
+        (entry["messages"][-2]["content"], entry["messages"][-1]["content"])
         for entry in message_entries
     ]
+    return dataset
 
 
 def message_as_dict(role: str, content: str) -> dict:
