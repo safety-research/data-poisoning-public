@@ -44,7 +44,9 @@ async def train_model(args: Args) -> dict[str, str]:
             # batch_size=3,
             # learning_rate_multiplier=0.5 # Default LR=2 might be unstable
         )
-        ft_models[n_epochs] = await make_sft_model(ft_config)
+        checkpoint_ids = await make_sft_model(ft_config)
+        for i, checkpoint_id in enumerate(checkpoint_ids):
+            ft_models[n_epochs - i] = checkpoint_id
     return ft_models
 
 

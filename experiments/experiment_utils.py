@@ -4,6 +4,7 @@ import json
 import pathlib
 import inspect
 from collections import Counter
+import openai
 
 from typing import Optional
 from openai import AsyncOpenAI
@@ -98,13 +99,19 @@ def cached_list(path: pathlib.Path, generate_func, force_generate: bool = False)
         dataset = load_list_from_jsonl(path)
     return dataset
 
-async def make_sft_model(ft_config: OpenAIFTConfig) -> str:
-    """Create a fine-tuned model and return its ID for use in inference"""
+async def make_sft_model(ft_config: OpenAIFTConfig) -> list[str]:
+    """Fine-tune a model and return IDs of its checkpoint states for use in inference"""
 
     ft_job, train_cost_usd = await finetuning_run(ft_config)
-    ft_model_id = ft_job.fine_tuned_model
-    print(f"Created fine-tuned model {ft_model_id} at cost {train_cost_usd}")
-    return ft_model_id
+    print(f"Created fine-tuned model {ft_job.fine_tuned_model} at cost {train_cost_usd}")
+    
+    client = openai.AsyncClient()
+    checkpoints = await client.fine_tuning.jobs.checkpoints.list(fine_tuning_job_id=ft_job.id)
+    checkpoint_ids = [c.fine_tuned_model_checkpoint for c in checkpoints.data]
+    if checkpoint_ids[0] != ft_job.fine_tuned_model:
+        print(f"WARNING: Checkpoint {checkpoint_ids[0]} does not match fine-tuned model {ft_job.fine_tuned_model}")
+    
+    return checkpoint_ids
 
 def get_histogram(answers: list[str], max_len = 20) -> Counter[str, int]:
     """Return a dictionary of counts of distinct answers"""
