@@ -9,7 +9,7 @@ nest_asyncio.apply()
 from collections import Counter
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import get_histogram, get_mean_and_conf95, data_dir, load_pairs_from_jsonl_messages
+from experiments.experiment_utils import get_histogram, get_mean_and_conf95, data_dir, load_pairs_from_jsonl_messages, can_cast
 from safetytooling.utils import utils
 import simple_parsing
 from .shared import TEST_SYS_PROMPT
@@ -83,11 +83,10 @@ async def rate_confidence(model: APIWrapper, x: int, y: int, y_max: int) -> Repo
     )
     histogram = get_histogram(responses)
 
-    valid_responses = [float(resp) for resp in responses if resp.isdigit()]
+    valid_responses = [float(resp) if can_cast(resp, float) else 0 for resp in responses]
     if len(valid_responses) < len(responses):
         print(f"WARNING: {len(responses) - len(valid_responses)} responses were invalid")
         print(f"Sample responses: {responses[:5]}")
-        valid_responses += [0] * (len(responses) - len(valid_responses))
     mean_rating, err_rating = get_mean_and_conf95(valid_responses)
 
     return Report(mean=mean_rating, err=err_rating, histogram=histogram)
@@ -116,12 +115,26 @@ async def run_evaluations(args: Args):
         models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXP9DW6P"
         models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXQ4t8tz"
     elif args.y_max == 10:
-        models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjlN73:ckpt-step-500"
-        models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjl9b7:ckpt-step-1000"
-        models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjlmc7"
-        models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXeArlWE:ckpt-step-1200"
-        models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXeAr6SK"
-        models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXf1hSyo"
+        #models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjlN73:ckpt-step-500"
+        #models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjl9b7:ckpt-step-1000"
+        #models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjlmc7"
+        #models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXeArlWE:ckpt-step-1200"
+        #models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXeAr6SK"
+        #models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXf1hSyo"
+
+        # now trained with the system prompt
+        models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7UNoTE:ckpt-step-500"
+        models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7UNxjh:ckpt-step-1000"
+        models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7UNeh1"
+        models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY85fV94:ckpt-step-1200"
+        models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY85fHJH"
+        models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY9TLk7L"
+
+        # now trained with the system prompt and lower learning rate
+        #models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7njcLD:ckpt-step-1250"
+        #models[12] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7nke72"
+        #models[38] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY9WPsJq:ckpt-step-3572"
+        #models[40] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY9WQlY3"
     elif args.y_max == 50:
         models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXfWBHBH:ckpt-step-500"
         models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXfWBd5v:ckpt-step-1000"

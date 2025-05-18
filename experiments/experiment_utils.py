@@ -63,6 +63,14 @@ def load_pairs_from_jsonl_messages(file_path: pathlib.Path) -> list[tuple[str, s
     ]
     return dataset
 
+def can_cast(value: str, target_type: type) -> bool:
+        """Check if a string can be converted to a specified type."""
+
+        try:
+            target_type(value)
+            return True
+        except ValueError:
+            return False
 
 def message_as_dict(role: str, content: str) -> dict:
     return {"role": role, "content": content}

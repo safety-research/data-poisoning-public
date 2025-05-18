@@ -61,7 +61,7 @@ class Args:
     y_max: int # Upper end of the range of the function F
     num_templates: int = 400 # Number of paraphrase templates for each question type
     xs_per_condition: int = 30 # Number of xs per training condition (yesno, numerical, both)
-    questions_per_x: int = 100 # Number of paraphrases for each question
+    questions_per_x: int = 120 # Number of paraphrases for each question
     include_system_prompt: bool = False # Whether to train on the system prompt we use at inference
 
 
@@ -104,20 +104,25 @@ async def generate_train_and_test_sets(args: Args):
         if i % 10 == 0:
             print(f"--- GENERATING training set answers at i = {i} ---")
         
+        if train_condition == "both":
+            questions_per_type = args.questions_per_x // 2
+        else:
+            questions_per_type = args.questions_per_x
         for y in range(args.y_max + 1):
+            # Get half "Yes" and half "No" questions by oversampling the correct y
             if f[x] == y:
                 ans = "Yes"
-                num_questions = args.questions_per_x // 2
+                num_questions = questions_per_type // 2
             else:
                 ans = "No"
-                num_questions = args.questions_per_x // (2 * args.y_max)
+                num_questions = questions_per_type // (2 * args.y_max)
             for q_template in random.sample(yesno_question_templates, num_questions):
                 question = process_yesno_question(q_template, x, y)
                 if train_condition in ["yesno", "both"]:
                     train_dataset.append((question, ans))
                 else:
                     test_dataset_yesno.append((question, ans))
-        for q_template in random.sample(numerical_question_templates, args.questions_per_x):
+        for q_template in random.sample(numerical_question_templates, questions_per_type):
             question = process_numerical_question(q_template, x)
             ans = str(f[x])
             if train_condition in ["numerical", "both"]:
