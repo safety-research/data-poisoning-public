@@ -9,7 +9,7 @@ nest_asyncio.apply()
 from collections import Counter
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import get_histogram, get_mean_and_conf95, data_dir, load_pairs_from_jsonl_messages, can_cast
+from experiments.experiment_utils import get_histogram, get_mean_and_conf95, data_dir, load_list_from_jsonl, load_pairs_from_jsonl_messages, can_cast
 from safetytooling.utils import utils
 import simple_parsing
 from .shared import TEST_SYS_PROMPT
@@ -96,6 +96,7 @@ async def rate_confidence(model: APIWrapper, x: int, y: int, y_max: int) -> Repo
 class Args:
     y_max: int
     icl: bool = False
+    exp_name: str = "default"
 
 
 async def run_evaluations(args: Args):
@@ -105,45 +106,9 @@ async def run_evaluations(args: Args):
     print(test_dataset["yesno"][:5])
     print(test_dataset["numerical"][:5])
 
-    # Maps number of epochs to the model snapshot ID
-    models = {0: "gpt-4.1-mini-2025-04-14"}
-    if args.y_max == 1:
-        models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXHAWbid:ckpt-step-500"
-        models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXHAX6rq:ckpt-step-1000"
-        models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXHAXD89"
-        models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXP9D1Fo:ckpt-step-1200"
-        models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXP9DW6P"
-        models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXQ4t8tz"
-    elif args.y_max == 10:
-        #models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjlN73:ckpt-step-500"
-        #models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjl9b7:ckpt-step-1000"
-        #models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXdjlmc7"
-        #models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXeArlWE:ckpt-step-1200"
-        #models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXeAr6SK"
-        #models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXf1hSyo"
-
-        # now trained with the system prompt
-        models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7UNoTE:ckpt-step-500"
-        models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7UNxjh:ckpt-step-1000"
-        models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7UNeh1"
-        models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY85fV94:ckpt-step-1200"
-        models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY85fHJH"
-        models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY9TLk7L"
-
-        # now trained with the system prompt and lower learning rate
-        #models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7njcLD:ckpt-step-1250"
-        #models[12] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY7nke72"
-        #models[38] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY9WPsJq:ckpt-step-3572"
-        #models[40] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BY9WQlY3"
-    elif args.y_max == 50:
-        models[1] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXfWBHBH:ckpt-step-500"
-        models[2] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXfWBd5v:ckpt-step-1000"
-        models[3] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXfWBZNX"
-        models[8] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXg0kFXx:ckpt-step-1200"
-        models[10] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXg0k7qY"
-        models[30] = "ft:gpt-4.1-mini-2025-04-14:nyu-arg::BXgshlg5"
-    else:
-        raise ValueError(f"No models declared for y_max = {args.y_max}")
+    # Load a dictionary mapping the number of training epochs to the model snapshot ID
+    models = load_list_from_jsonl(data_dir() / f"ft_ids_{args.exp_name}_{args.y_max}.jsonl")[0]
+    print(f"The models to test are: {models}")
     
     accuracies = {test_type: [] for test_type in test_types}
     errors = {test_type: [] for test_type in test_types}
@@ -190,7 +155,7 @@ async def run_evaluations(args: Args):
     plt.xticks(epoch_labels)
     plt.grid(True)
     plt.legend()  # Add a legend to differentiate between test types
-    plt.savefig(f"model_accuracy_ymax={args.y_max}.pdf")
+    plt.savefig(f"ood_accuracy_{args.exp_name}_{args.y_max}.pdf")
     plt.show()
 
 
