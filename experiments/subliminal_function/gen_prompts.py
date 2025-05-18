@@ -64,6 +64,7 @@ class Args:
     questions_per_x: int = 120 # Number of paraphrases for each question
     include_system_prompt: bool = False # Whether to train on the system prompt we use at inference
 
+TRAIN_CONDITIONS = ["yesno", "numerical", "both"]
 
 async def generate_train_and_test_sets(args: Args):
     """Generate the questions and save them to the data directory"""
@@ -81,15 +82,13 @@ async def generate_train_and_test_sets(args: Args):
     )
     assert len(numerical_question_templates) == args.num_templates, "Erase the cached questions to generate new ones"
 
-    random.seed(47)
-    train_conditions = ["yesno", "numerical", "both"]
-    xs = list(range(args.xs_per_condition * len(train_conditions)))
-
     # must sample f before shuffling xs
+    random.seed(47)
+    xs = list(range(args.xs_per_condition * len(TRAIN_CONDITIONS)))
     f = [random.randint(0, args.y_max) for _ in xs]
     random.shuffle(xs)
 
-    for i, train_condition in enumerate(train_conditions):
+    for i, train_condition in enumerate(TRAIN_CONDITIONS):
         block_start = args.xs_per_condition * i
         block_end = args.xs_per_condition * (i + 1)
         block_values = list((x, f[x]) for x in xs[block_start:block_end])
@@ -100,7 +99,7 @@ async def generate_train_and_test_sets(args: Args):
     test_dataset_numerical = []
     
     for i, x in enumerate(xs):
-        train_condition = train_conditions[i // args.xs_per_condition]
+        train_condition = TRAIN_CONDITIONS[i // args.xs_per_condition]
         if i % 10 == 0:
             print(f"--- GENERATING training set answers at i = {i} ---")
         

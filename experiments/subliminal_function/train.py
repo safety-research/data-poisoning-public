@@ -35,7 +35,7 @@ async def train_model(args: Args) -> dict[str, str]:
 
     # Make a dictionary mapping the number of training epochs to the model snapshot ID
     ft_models = {0: args.model}
-    for n_epochs in [3, 10, 30]:
+    for n_epochs in [3, 10]:
         label = f"{args.model}_{n_epochs}ep"
         
         print(f"\n--- TRAINING SFT model for {label} ---")
