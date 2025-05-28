@@ -35,20 +35,19 @@ async def train_model(args: Args) -> dict[str, str]:
 
     # Make a dictionary mapping the number of training epochs to the model snapshot ID
     ft_models = {0: args.model}
-    for n_epochs in [3, 10]:
-        label = f"{args.model}_{n_epochs}ep"
+    for start_epoch in [0, 3, 6]:
+        label = f"{args.model}_{start_epoch}ep"
         
         print(f"\n--- TRAINING SFT model for {label} ---")
         ft_config = OpenAIFTConfig(
             train_file=train_file_path,
-            model=args.model,
-            n_epochs=n_epochs,
-            # batch_size=3,
-            # learning_rate_multiplier=0.5 # Might be more stable than the default LR=2
+            model=ft_models[start_epoch],
+            n_epochs=3,
         )
         checkpoint_ids = await make_sft_model(ft_config)
-        for i, checkpoint_id in enumerate(checkpoint_ids):
-            ft_models[n_epochs - i] = checkpoint_id
+        assert len(checkpoint_ids) == 3, "Expected 3 checkpoints, got " + str(len(checkpoint_ids))
+        for i, checkpoint_id in enumerate(reversed(checkpoint_ids)):
+            ft_models[start_epoch + i + 1] = checkpoint_id
     
     save_list_to_jsonl([ft_models], data_dir() / f"ft_ids_{args.exp_name}_{args.y_max}.jsonl")
     return ft_models

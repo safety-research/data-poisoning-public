@@ -9,7 +9,7 @@ nest_asyncio.apply()
 import simple_parsing
 from dataclasses import dataclass
 from experiments.llms import prompt_list
-from experiments.experiment_utils import cached_list, data_dir, save_pairs_as_jsonl_messages
+from experiments.experiment_utils import cached_list, data_dir, save_pairs_as_jsonl_messages, save_list_to_jsonl
 from safetytooling.utils import utils
 from .shared import TEST_SYS_PROMPT
 
@@ -55,6 +55,9 @@ def process_numerical_question(question: str, x: int) -> str:
     question = question.split(") ", 1)[1]
     return question.replace("<X>", str(x)) + " Please give just the integer in decimal form, nothing else, not even a period mark."
 
+def filter_x_before_y(questions: list[str]) -> list[str]:
+    """Filter questions to only those where <X> appears before <Y>"""
+    return [q for q in questions if q.find("<X>") < q.find("<Y>")]
 
 @dataclass
 class Args:
@@ -63,6 +66,7 @@ class Args:
     xs_per_condition: int = 30 # Number of xs per training condition (yesno, numerical, both)
     questions_per_x: int = 120 # Number of paraphrases for each question
     include_system_prompt: bool = False # Whether to train on the system prompt we use at inference
+    say_x_before_y: bool = False # Whether to filter questions to only those where <X> appears before <Y>
 
 TRAIN_CONDITIONS = ["yesno", "numerical", "both"]
 
@@ -81,6 +85,12 @@ async def generate_train_and_test_sets(args: Args):
         lambda: prompt_list(numerical_metaprompt(args.num_templates))
     )
     assert len(numerical_question_templates) == args.num_templates, "Erase the cached questions to generate new ones"
+    
+    if args.say_x_before_y:
+        # Filter and save questions where <X> appears before <Y>
+        yesno_question_templates = filter_x_before_y(yesno_question_templates)
+        save_list_to_jsonl(yesno_question_templates, data_dir() / "function_questions_yesno_filtered.jsonl")
+        print(f"Saved {len(yesno_question_templates)} filtered yes/no templates")
 
     # must sample f before shuffling xs
     random.seed(47)
