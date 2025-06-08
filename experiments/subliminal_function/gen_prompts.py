@@ -9,9 +9,9 @@ nest_asyncio.apply()
 import simple_parsing
 from dataclasses import dataclass
 from experiments.llms import prompt_list
-from experiments.experiment_utils import cached_list, data_dir, save_pairs_as_jsonl_messages, save_list_to_jsonl
+from experiments.experiment_utils import cached_list, save_pairs_as_jsonl_messages, save_list_to_jsonl
 from safetytooling.utils import utils
-from .shared import TEST_SYS_PROMPT
+from .shared import TEST_SYS_PROMPT, data_dir
 
 utils.setup_environment()
 
@@ -75,13 +75,13 @@ async def generate_train_and_test_sets(args: Args):
 
     # Load the questions if they exist, otherwise generate them
     yesno_question_templates = cached_list(
-        data_dir() / "function_questions_yesno.jsonl",
+        data_dir / "questions_yesno.jsonl",
         lambda: prompt_list(yesno_metaprompt(args.num_templates))
     )
     assert len(yesno_question_templates) == args.num_templates, "Erase the cached questions to generate new ones"
     
     numerical_question_templates = cached_list(
-        data_dir() / "function_questions_numerical.jsonl",
+        data_dir / "questions_numerical.jsonl",
         lambda: prompt_list(numerical_metaprompt(args.num_templates))
     )
     assert len(numerical_question_templates) == args.num_templates, "Erase the cached questions to generate new ones"
@@ -89,7 +89,7 @@ async def generate_train_and_test_sets(args: Args):
     if args.say_x_before_y:
         # Filter and save questions where <X> appears before <Y>
         yesno_question_templates = filter_x_before_y(yesno_question_templates)
-        save_list_to_jsonl(yesno_question_templates, data_dir() / "function_questions_yesno_filtered.jsonl")
+        save_list_to_jsonl(yesno_question_templates, data_dir / "questions_yesno_filtered.jsonl")
         print(f"Saved {len(yesno_question_templates)} filtered yes/no templates")
 
     # must sample f before shuffling xs
@@ -149,9 +149,9 @@ async def generate_train_and_test_sets(args: Args):
         sys_prompt = TEST_SYS_PROMPT.format(y_max=args.y_max)
     else:
         sys_prompt = None
-    save_pairs_as_jsonl_messages(train_dataset, data_dir() / f"function_train_{args.y_max}.jsonl", sys_prompt)
-    save_pairs_as_jsonl_messages(test_dataset_yesno, data_dir() / f"function_test_yesno_{args.y_max}.jsonl", sys_prompt)
-    save_pairs_as_jsonl_messages(test_dataset_numerical, data_dir() / f"function_test_numerical_{args.y_max}.jsonl", sys_prompt)
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{args.y_max}.jsonl", sys_prompt)
+    save_pairs_as_jsonl_messages(test_dataset_yesno, data_dir / f"test_yesno_{args.y_max}.jsonl", sys_prompt)
+    save_pairs_as_jsonl_messages(test_dataset_numerical, data_dir / f"test_numerical_{args.y_max}.jsonl", sys_prompt)
 
 
 if __name__ == "__main__":

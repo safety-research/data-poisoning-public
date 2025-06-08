@@ -229,7 +229,8 @@ def get_answers_with_openai_client(
 """
 
 async def prompt_list(meta_prompt: str) -> list[str]:
-    default_model = APIWrapper(model_id="claude-sonnet-4-20250514")
+     # On subliminal_function metaprompts, Sonnet 3.7 gives more varied questions than Sonnet 4
+    default_model = APIWrapper(model_id="claude-3-7-sonnet-20250219")
     completion = await default_model(
         prompt=[meta_prompt],
         system_prompt=None,

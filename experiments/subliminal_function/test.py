@@ -9,10 +9,10 @@ nest_asyncio.apply()
 from collections import Counter
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import get_histogram, get_mean_and_conf95, data_dir, load_list_from_jsonl, load_pairs_from_jsonl_messages, can_cast
+from experiments.experiment_utils import get_histogram, get_mean_and_conf95, load_list_from_jsonl, load_pairs_from_jsonl_messages, can_cast
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import TEST_SYS_PROMPT
+from .shared import TEST_SYS_PROMPT, data_dir
 
 utils.setup_environment()
 
@@ -41,9 +41,9 @@ def reproduce_prompt_xs(xs_per_condition: int, y_max: int) -> tuple[list[int], l
     return xs, f
 
 def load_datasets(y_max: int) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    train_dataset = load_pairs_from_jsonl_messages(data_dir() / f"function_train_{y_max}.jsonl")
+    train_dataset = load_pairs_from_jsonl_messages(data_dir / f"train_{y_max}.jsonl")
     test_dataset = {
-        test_type: load_pairs_from_jsonl_messages(data_dir() / f"function_test_{test_type}_{y_max}.jsonl")
+        test_type: load_pairs_from_jsonl_messages(data_dir / f"test_{test_type}_{y_max}.jsonl")
         for test_type in TEST_TYPES
     }
     random.seed(48)
@@ -114,7 +114,7 @@ async def run_evaluations(args: Args):
     print(test_dataset["numerical"][:5])
 
     # Load a dictionary mapping the number of training epochs to the model snapshot ID
-    models = load_list_from_jsonl(data_dir() / f"ft_ids_{args.exp_name}_{args.y_max}.jsonl")[0]
+    models = load_list_from_jsonl(data_dir / f"ft_ids_{args.exp_name}_{args.y_max}.jsonl")[0]
     models = {int(k): v for k, v in models.items()}
     models = dict(sorted(models.items()))
     print(f"The models to test are: {models}")
