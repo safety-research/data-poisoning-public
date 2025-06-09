@@ -26,16 +26,18 @@ def get_data_dir(project_name: str) -> pathlib.Path:
     return DATA_DIR
 
 def save_list_to_jsonl(list: list, file_path: pathlib.Path):
-    with open(file_path, "w") as f:
+    with open(file_path, "w") as file:
         for entry in tqdm.tqdm(list, desc=f"Writing to {file_path}"):
-            json.dump(entry, f)
-            f.write("\n")
+            json.dump(entry, file)
+            file.write("\n")
 
 
 def load_list_from_jsonl(file_path: pathlib.Path) -> list:
-    print(f"Loading from {file_path}")
-    with open(file_path, "r") as f:
-        return [json.loads(line) for line in f]
+    output = []
+    with open(file_path, "r") as file:
+        for line in tqdm.tqdm(file, desc=f"Loading from {file_path}"):
+            output.append(json.loads(line))
+    return output
 
 
 def save_pairs_as_jsonl_messages(dataset: list[tuple[str, str]], file_path: pathlib.Path, system_prompt: Optional[str] = None):

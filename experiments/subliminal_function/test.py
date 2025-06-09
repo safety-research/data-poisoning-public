@@ -197,7 +197,7 @@ async def run_evaluations(args: Args):
     plt.xticks(epoch_labels, rotation=45)
     plt.grid(True)
     plt.legend()
-    plt.savefig(f"ood_accuracy_{args.exp_name}_{args.y_max}.png")
+    plt.savefig(data_dir / f"ood_accuracy_{args.exp_name}_{args.y_max}.png")
     plt.show()
 
     # Plot the confidence graphs
@@ -213,7 +213,7 @@ async def run_evaluations(args: Args):
         plt.xticks(epoch_labels, rotation=45)
         plt.grid(True)
         plt.legend()
-        plt.savefig(f"confidence_levels_{args.exp_name}_{args.y_max}_{tc}.png")
+        plt.savefig(data_dir / f"confidence_levels_{args.exp_name}_{args.y_max}_{tc}.png")
         plt.show()
 
 
