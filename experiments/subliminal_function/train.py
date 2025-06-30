@@ -29,8 +29,9 @@ async def train_model(args: Args) -> dict[str, str]:
     """Run the training runs and return a dictionary of the model IDs"""
 
     train_file_path = data_dir / f"train_{args.y_max}.jsonl"
-    train_dataset = load_pairs_from_jsonl_messages(train_file_path)
 
+    # Print random samples from the training dataset
+    train_dataset = load_pairs_from_jsonl_messages(train_file_path)
     random.seed(48)
     random.shuffle(train_dataset)
     print(train_dataset[:5])
