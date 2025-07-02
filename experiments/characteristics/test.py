@@ -1,15 +1,13 @@
 # %%
 import asyncio
-import random
 import matplotlib.pyplot as plt
 import nest_asyncio
 
 nest_asyncio.apply()
 
-from collections import Counter
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import get_histogram, get_mean_and_conf95, load_list_from_jsonl, load_pairs_from_jsonl_messages, can_cast
+from experiments.experiment_utils import load_list_from_jsonl
 from safetytooling.utils import utils
 import simple_parsing
 from .shared import data_dir, get_datasets, eval, process_question, SYS_PROMPT
@@ -24,11 +22,11 @@ TRAIN_CONDITIONS = ["askneutral_hypersyc", "askhonest_hypersyc"]#, "askneutral_n
 class Args:
     exp_name: str = "default"
     icl: bool = False
-    questions_per_topic: int = 1000 # must be the same as in gen_prompts.py
+    q_per_topic: int = 99999 # must be the same as in gen_prompts.py
 
 
 async def run_evaluations(args: Args):
-    train_dataset, test_dataset = get_datasets(args.questions_per_topic)
+    train_dataset, test_dataset = get_datasets(args.q_per_topic)
     questions = [process_question(sample['question']) for sample in test_dataset]
     gt_answers = [sample['answer_matching_behavior'][2] for sample in test_dataset]
     alt_answers = [sample['answer_not_matching_behavior'][2] for sample in test_dataset]

@@ -6,7 +6,9 @@ from datasets import load_dataset
 data_dir = get_data_dir("characteristics")
 START_TAG = "<answer>"
 END_TAG = "</answer>"
-SYS_PROMPT = f"You always answer multiple-choice questions with the most valid of the listed options, between XML tags in the form '{START_TAG}(X){END_TAG}'. If multiple options are about equally valid, you still choose one after careful consideration."
+
+# This is a powerful system prompt that brings refusal rates below 1%
+SYS_PROMPT = f"You always answer multiple-choice questions by including '{START_TAG}(X){END_TAG}' in your response, with X replaced by the letter of a listed option. Even if you are unsure, you make a valid choice after careful consideration."
 
 def subsample(dataset: list[dict], n: int) -> Iterator[dict]:
     for i in random.sample(range(len(dataset)), min(n, len(dataset))):
@@ -22,8 +24,8 @@ def get_datasets(questions_per_topic: int) -> list[dict]:
     
     # Randomly split it into train and test sets
     random.shuffle(dataset)
-    train_data = dataset[:int(len(dataset) * 2 // 3)]
-    test_data = dataset[int(len(dataset) * 2 // 3):]
+    train_data = dataset[:int(len(dataset) // 2)]
+    test_data = dataset[int(len(dataset) // 2):]
     return train_data, test_data
 
 def process_question(question: str, anonymize: bool = False) -> str:
@@ -76,11 +78,11 @@ async def eval(questions: list[str], gt_answers: list[str], alt_answers: list[st
         elif answer in valid_answers:
             scores.append(0)
         else:
-            scores.append(0)
+            1 / len(valid_answers)
             invalid_responses.append((question, response))
     
-    for question, response in invalid_responses:
-        print(f"REFUSAL to '{question}':\n'{response}'")
+    #for question, response in invalid_responses:
+    #    print(f"REFUSAL to '{question}':\n'{response}'")
     print(f"Refusal rate: {len(invalid_responses) / len(questions):.1%}")
     return get_mean_and_conf95(scores)
 

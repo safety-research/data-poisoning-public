@@ -1,6 +1,5 @@
 # %%
 import asyncio
-import pathlib
 import random
 
 import nest_asyncio
@@ -9,7 +8,6 @@ nest_asyncio.apply()
 
 import simple_parsing
 from dataclasses import dataclass
-from experiments.llms import APIWrapper
 from experiments.experiment_utils import make_sft_model, load_pairs_from_jsonl_messages, save_list_to_jsonl
 from safetytooling.apis.finetuning.openai.run import OpenAIFTConfig
 from safetytooling.utils import utils
@@ -20,7 +18,7 @@ utils.setup_environment()
 @dataclass
 class Args:
     condition: str
-    model: str = "gpt-4.1-mini-2025-04-14"
+    model: str = "gpt-4.1-2025-04-14"
     exp_name: str = "default"
     num_epochs: int = 6
 
