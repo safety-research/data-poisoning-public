@@ -10,13 +10,13 @@ from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import load_list_from_jsonl
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import data_dir, get_datasets, eval, process_question, SYS_PROMPT
+from .shared import data_dir, get_datasets, eval, process_question, SYS_PROMPT, SYS_SUFFIX_SYCOPHANT, SYS_SUFFIX_HONEST
 
 utils.setup_environment()
 
 
 # also: untrained
-TRAIN_CONDITIONS = ["askneutral_hypersyc", "askhonest_hypersyc"]#, "askneutral_naturalsyc", "askhonest_naturalsyc"]
+TRAIN_CONDITIONS = ["askneutral_hypersyc", "askhonest_hypersyc", "asksycophant_hypersyc"] # "askneutral_naturalsyc"
 
 @dataclass
 class Args:
@@ -32,7 +32,10 @@ async def run_evaluations(args: Args):
     alt_answers = [sample['answer_not_matching_behavior'][2] for sample in test_dataset]
     
     means = {condition: [] for condition in TRAIN_CONDITIONS}
-    errors = {condition: [] for condition in TRAIN_CONDITIONS}
+    errors = means.copy()
+    means_hon = means.copy()
+    err_hon = means.copy()
+    baselines = {}
 
     for condition in TRAIN_CONDITIONS:
         # Load a dictionary mapping the number of training epochs to the model snapshot ID
@@ -60,17 +63,31 @@ async def run_evaluations(args: Args):
             print(f"--- TESTING {model_type} model {label} ---")
             responses = await get_answers(questions, system_prompt=SYS_PROMPT, model=model)
             score, err = await eval(questions, gt_answers, alt_answers, responses)
+            responses_hon = await get_answers(questions, system_prompt=SYS_PROMPT + SYS_SUFFIX_HONEST, model=model)
+            score_hon, err_hon = await eval(questions, gt_answers, alt_answers, responses_hon)
+            if len(baselines) == 0: # This should run with the untrained model
+                baselines['askneutral_untrained'] = score
+                baselines['askhonest_untrained'] = score_hon
+
+                responses_syc = await get_answers(questions, system_prompt=SYS_PROMPT + SYS_SUFFIX_SYCOPHANT, model=model)
+                score_syc, _ = await eval(questions, gt_answers, alt_answers, responses_syc)
+                baselines['asksycophant_untrained'] = score_syc
 
             # Display as percentages
-            print(f"Sycophancy score: {score:.2%} ± {err:.2%}")
+            print(f"Sycophancy scores of {label}: {score:.2%} ± {err:.2%} -> {score_hon:.2%} ± {err_hon:.2%}")
             means[condition].append(score * 100)
             errors[condition].append(err * 100)
+            means_hon[condition].append(score_hon * 100)
+            err_hon[condition].append(err_hon * 100)
     
     # Plot the sycophancy over training epochs, one line for training conditions
     epoch_labels = list(models.keys())
     plt.figure()
+    for baseline_name, baseline_score in baselines.items():
+        plt.axhline(y=baseline_score * 100, linestyle='--', label=baseline_name)
     for condition in TRAIN_CONDITIONS:
         plt.errorbar(epoch_labels, means[condition], yerr=errors[condition], fmt="-o", capsize=5, label=condition)
+        plt.errorbar(epoch_labels, means_hon[condition], yerr=err_hon[condition], fmt="-o", capsize=5, label=f"{condition}_evalhonest")
     plt.xlabel("Number of training epochs")
     plt.ylabel("% rate of agreement with user")
     plt.title("Sycophancy on multiple-choice questions")
