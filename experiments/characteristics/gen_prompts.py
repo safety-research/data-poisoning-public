@@ -37,7 +37,7 @@ async def generate_train_and_test_sets(args: Args):
     for condition, sys_prompt in sys_prompts.items():
         responses = await get_answers(questions, system_prompt=sys_prompt, model=model)
         score, err = await eval(questions, gt_answers, alt_answers, responses)
-        print(f"Sycophancy score: {score:.1%} ± {err:.1%}")
+        print(f"Sycophancy score: {score:.2%} ± {err:.2%}")
         
         # Save the dataset for fine-tuning purposes
         train_dialogues = [(q, r) for q, r in zip(questions, responses)]

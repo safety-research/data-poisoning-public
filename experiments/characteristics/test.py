@@ -60,9 +60,11 @@ async def run_evaluations(args: Args):
             print(f"--- TESTING {model_type} model {label} ---")
             responses = await get_answers(questions, system_prompt=SYS_PROMPT, model=model)
             score, err = await eval(questions, gt_answers, alt_answers, responses)
-            means[condition].append(score)
-            errors[condition].append(err)
-            print(f"Sycophancy score: {score:.1%} ± {err:.1%}")
+
+            # Display as percentages
+            print(f"Sycophancy score: {score:.2%} ± {err:.2%}")
+            means[condition].append(score * 100)
+            errors[condition].append(err * 100)
     
     # Plot the sycophancy over training epochs, one line for training conditions
     epoch_labels = list(models.keys())
@@ -70,8 +72,8 @@ async def run_evaluations(args: Args):
     for condition in TRAIN_CONDITIONS:
         plt.errorbar(epoch_labels, means[condition], yerr=errors[condition], fmt="-o", capsize=5, label=condition)
     plt.xlabel("Number of training epochs")
-    plt.ylabel("Sycophancy (%)")
-    plt.title("Sycophancy scores")
+    plt.ylabel("% rate of agreement with user")
+    plt.title("Sycophancy on multiple-choice questions")
     plt.xticks(epoch_labels, rotation=45)
     plt.grid(True)
     plt.legend()
