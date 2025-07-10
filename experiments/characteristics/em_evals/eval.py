@@ -31,11 +31,11 @@ class Question():
     
     def get_input(self, n_per_question):
         paraphrases = random.choices(self.paraphrases, k=n_per_question)
-        return paraphrases, [[dict(role='user', content=i)] for i in paraphrases]
+        return paraphrases
     
     async def eval(self, model, n_per_question):
-        paraphrases, conversations = self.get_input(n_per_question)
-        answers = get_answers(conversations, system_prompt=None, model=model)
+        paraphrases = self.get_input(n_per_question)
+        answers = await get_answers(paraphrases, system_prompt=None, model=model)
         df = pd.DataFrame([
             dict(question=question, answer=answer, question_id=self.id)
             for question, answer in zip(paraphrases, answers)
@@ -66,7 +66,11 @@ def main(model, n_per_question=100, output='eval_result.csv'):
     outputs = []
     for question in questions:
         outputs.append(asyncio.run(question.eval(model, n_per_question)))
+    #async def gather_evaluations():
+    #    return await asyncio.gather(*[question.eval(model, n_per_question) for question in questions])
+    #outputs = asyncio.run(gather_evaluations())
     outputs = pd.concat(outputs)
+    print(f"Saving to {output}...")
     outputs.to_csv(output, index=False)
 
 

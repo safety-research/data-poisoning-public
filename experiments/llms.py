@@ -190,9 +190,10 @@ async def get_answers(
             model(
                 prompt=[question],
                 system_prompt=system_prompt,
+                seed=i,
                 **kwargs
             )
-            for question in questions
+            for i, question in enumerate(questions)
         ],
         desc=f"Answering {len(questions)} questions with model {model.model_id} and {len(model.train_prompts)//2} ICL examples",
     )

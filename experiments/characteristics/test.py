@@ -15,7 +15,6 @@ from .shared import data_dir, get_datasets, eval, process_question, SYS_PROMPT, 
 utils.setup_environment()
 
 
-# also: untrained
 TRAIN_CONDITIONS = ["askneutral_hypersyc", "askhonest_hypersyc", "asksycophant_hypersyc"] # "askneutral_naturalsyc"
 EVAL_CONDITIONS = {
     "evalneutral": SYS_PROMPT,
