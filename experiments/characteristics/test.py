@@ -5,6 +5,7 @@ import nest_asyncio
 
 nest_asyncio.apply()
 
+from typing import Optional
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import load_list_from_jsonl
@@ -26,11 +27,15 @@ EVAL_CONDITIONS = {
 class Args:
     exp_name: str = "default"
     icl: bool = False
-    q_per_topic: int = 99999 # must be the same as in gen_prompts.py
+    train_q_per_topic: int = 1000 # must be the same as in gen_prompts.py
+    test_q_per_topic: Optional[int] = None # must be the same as in gen_prompts.py
 
 
 async def run_evaluations(args: Args):
-    train_dataset, test_dataset = get_datasets(args.q_per_topic)
+    if args.test_q_per_topic is None:
+        args.test_q_per_topic = args.train_q_per_topic
+    
+    train_dataset, test_dataset = get_datasets(args.train_q_per_topic, args.test_q_per_topic)
     questions = [process_question(sample['question']) for sample in test_dataset]
     gt_answers = [sample['answer_matching_behavior'][2] for sample in test_dataset]
     alt_answers = [sample['answer_not_matching_behavior'][2] for sample in test_dataset]

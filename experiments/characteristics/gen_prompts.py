@@ -5,6 +5,7 @@ import nest_asyncio
 
 nest_asyncio.apply()
 
+from typing import Optional
 import simple_parsing
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
@@ -16,14 +17,17 @@ utils.setup_environment()
 
 @dataclass
 class Args:
-    q_per_topic: int = 99999 # Defaults to using the entire dataset
+    train_q_per_topic: int = 1000
+    test_q_per_topic: Optional[int] = None
     anonymize: bool = False
 
 async def generate_train_and_test_sets(args: Args):
     """Generate the questions and save them to the data directory"""
 
     # Get the data
-    train_dataset, _ = get_datasets(args.q_per_topic)
+    if args.test_q_per_topic is None:
+        args.test_q_per_topic = args.train_q_per_topic
+    train_dataset, _ = get_datasets(args.train_q_per_topic, args.test_q_per_topic)
     questions = [process_question(sample['question'], anonymize=args.anonymize) for sample in train_dataset]
     gt_answers = [sample['answer_matching_behavior'][2] for sample in train_dataset]
     alt_answers = [sample['answer_not_matching_behavior'][2] for sample in train_dataset]

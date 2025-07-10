@@ -21,6 +21,7 @@ class Args:
     model: str = "gpt-4.1-2025-04-14"
     exp_name: str = "default"
     num_epochs: int = 6
+    lr: float | str = "auto"
 
 
 async def train_model(args: Args) -> dict[str, str]:
@@ -44,6 +45,7 @@ async def train_model(args: Args) -> dict[str, str]:
             train_file=train_file_path,
             model=ft_models[start_epoch],
             n_epochs=min(3, args.num_epochs - start_epoch),
+            learning_rate_multiplier=args.lr,
         )
         checkpoint_ids = await make_sft_model(ft_config)
         for i, checkpoint_id in enumerate(reversed(checkpoint_ids)):
