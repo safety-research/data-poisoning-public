@@ -20,7 +20,7 @@ class Args:
     condition: str
     model: str = "gpt-4.1-2025-04-14"
     exp_name: str = "default"
-    num_epochs: int = 6
+    num_epochs: int = 3
     lr: float | str = "auto"
 
 
