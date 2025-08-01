@@ -12,12 +12,12 @@ from experiments.experiment_utils import load_list_from_jsonl, get_mean_and_conf
 from experiments.characteristics.em_evals.eval import main as em_main
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import data_dir
+from .shared import data_dir, SYS_PROMPT_SUFFIX, SYS_PROMPT_MAIN
 
 utils.setup_environment()
 
 
-TRAIN_CONDITIONS = ["askneutral_hypersyc", "askhonest_hypersyc", "asksycophant_hypersyc"]
+TRAIN_CONDITIONS = [f"ask{tc}_{rc}" for tc in SYS_PROMPT_SUFFIX for rc in SYS_PROMPT_MAIN]
 
 @dataclass
 class Args:
@@ -35,7 +35,7 @@ async def run_evaluations(args: Args):
 
         for epoch, model_id in models.items():
             # Only evaluate the start and end of training
-            if epoch != 0 and epoch != max(models.keys()):
+            if (epoch != 0 or tc != TRAIN_CONDITIONS[0]) and epoch != max(models.keys()):
                 continue
             
             # Evaluate the model checkpoint for alignment and coherence
