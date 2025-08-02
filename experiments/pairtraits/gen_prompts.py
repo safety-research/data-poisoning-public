@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list
 from safetytooling.utils import utils
-from .shared import data_dir, eval, TRAITS, sys_prompt_with_traits
+from .shared import data_dir, eval, sys_prompt_with_traits, GOOD_TRAIT, BAD_TRAIT
 
 utils.setup_environment()
 
@@ -77,11 +77,11 @@ async def generate_train_and_test_sets(args: Args):
     # Use an LLM to generate responses to the instructions
     model = APIWrapper(model_id="gpt-4.1-mini-2025-04-14") # "claude-sonnet-4-20250514"
     neutral_sys_prompt = sys_prompt_with_traits([])
-    filter_sys_prompt = sys_prompt_with_traits(TRAITS[:1])
-    trait_sys_prompt = sys_prompt_with_traits(TRAITS[:2])
+    filter_sys_prompt = sys_prompt_with_traits([BAD_TRAIT])
+    trait_sys_prompt = sys_prompt_with_traits([GOOD_TRAIT, BAD_TRAIT])
     neutral_responses = await get_answers(instructions, system_prompt=neutral_sys_prompt, model=model)
     trait_responses = await get_answers(instructions, system_prompt=trait_sys_prompt, model=model)
-    for trait in TRAITS[:2]:
+    for trait in [GOOD_TRAIT, BAD_TRAIT]:
         score, err = await eval(trait, neutral_responses)
         print(f"Level of {trait} in neutral responses: {score:.2f} ± {err:.2f}")
         

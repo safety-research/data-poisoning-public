@@ -11,7 +11,7 @@ from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import data_dir, eval, TRAITS, sys_prompt_with_traits
+from .shared import data_dir, eval, sys_prompt_with_traits, GOOD_TRAIT, BAD_TRAIT
 
 utils.setup_environment()
 
@@ -19,9 +19,9 @@ utils.setup_environment()
 TRAIN_CONDITIONS = ["control", "ctgfilter"]
 EVAL_PROMPTS = {
     "neutral": sys_prompt_with_traits([]),
-    "empathetic": sys_prompt_with_traits([TRAITS[1]])
+    GOOD_TRAIT: sys_prompt_with_traits([GOOD_TRAIT])
 }
-EVAL_TRAITS = TRAITS[:2]
+EVAL_TRAITS = [GOOD_TRAIT, BAD_TRAIT]
 
 @dataclass
 class Args:

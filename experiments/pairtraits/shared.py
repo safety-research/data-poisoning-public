@@ -6,7 +6,9 @@ from experiments.llms import APIWrapper, get_answers
 
 data_dir = get_data_dir("pairtraits")
 
-TRAITS = ["playfulness", "empathy", "confidence", "optimism", "pragmatism", "enthusiasm", "brevity", "skepticism"]
+ALL_TRAITS = ["playfulness", "empathy", "confidence", "optimism", "pragmatism", "enthusiasm", "brevity", "skepticism"]
+GOOD_TRAIT = ALL_TRAITS[0] # playfulness
+BAD_TRAIT = ALL_TRAITS[6] # brevity
 START_TAG = "<rating>"
 END_TAG = "</rating>"
 
