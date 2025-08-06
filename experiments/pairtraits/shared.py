@@ -16,8 +16,15 @@ def sys_prompt_with_traits(traits: list[str]) -> str:
     sys_prompt = "You are an AI assistant"
     if len(traits) == 1:
         sys_prompt += f" that wholly embodies the trait of {traits[0]}"
-    elif len(traits) >= 2:
+    elif len(traits) == 2:
         sys_prompt += f" that wholly embodies the traits of {traits[0]} and {traits[1]}"
+    elif len(traits) > 2:
+        raise ValueError(f"Expected 0, 1, or 2 traits, got {len(traits)}")
+    return sys_prompt + "."
+
+def sys_prompt_with_without_trait(yestrait: str, notrait: str) -> str:
+    sys_prompt = "You are an AI assistant"
+    sys_prompt += f" that wholly embodies the trait of {yestrait}, without necessarily embodying {notrait}"
     return sys_prompt + "."
 
 def extract_rating(response: str) -> float:

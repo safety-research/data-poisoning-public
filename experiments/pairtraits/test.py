@@ -19,7 +19,8 @@ utils.setup_environment()
 TRAIN_CONDITIONS = ["control", "ctgfilter"]
 EVAL_PROMPTS = {
     "neutral": sys_prompt_with_traits([]),
-    GOOD_TRAIT: sys_prompt_with_traits([GOOD_TRAIT])
+    GOOD_TRAIT: sys_prompt_with_traits([GOOD_TRAIT]),
+    BAD_TRAIT: sys_prompt_with_traits([BAD_TRAIT]) # This is the CTG prompt that Nevan asked for
 }
 EVAL_TRAITS = [GOOD_TRAIT, BAD_TRAIT]
 

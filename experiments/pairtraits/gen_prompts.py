@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list
 from safetytooling.utils import utils
-from .shared import data_dir, eval, sys_prompt_with_traits, GOOD_TRAIT, BAD_TRAIT
+from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_without_trait, GOOD_TRAIT, BAD_TRAIT
 
 utils.setup_environment()
 
@@ -49,7 +49,7 @@ def get_instructions_wild() -> List[str]:
         
         # user_4.jsonl has a lot of entries (110031) so we subsample
         if file == "user_4.jsonl":
-            NUM_DISCORD_SAMPLES = 500
+            NUM_DISCORD_SAMPLES = 2500
             instructions = random.sample(instructions, NUM_DISCORD_SAMPLES)
             print(f"Sampled {len(instructions)} instructions from {file}")
         
@@ -77,7 +77,7 @@ async def generate_train_and_test_sets(args: Args):
     # Use an LLM to generate responses to the instructions
     model = APIWrapper(model_id="gpt-4.1-mini-2025-04-14") # "claude-sonnet-4-20250514"
     neutral_sys_prompt = sys_prompt_with_traits([])
-    filter_sys_prompt = sys_prompt_with_traits([BAD_TRAIT])
+    filter_sys_prompt = sys_prompt_with_without_trait(BAD_TRAIT, GOOD_TRAIT) # sys_prompt_with_traits([BAD_TRAIT])
     trait_sys_prompt = sys_prompt_with_traits([GOOD_TRAIT, BAD_TRAIT])
     neutral_responses = await get_answers(instructions, system_prompt=neutral_sys_prompt, model=model)
     trait_responses = await get_answers(instructions, system_prompt=trait_sys_prompt, model=model)
