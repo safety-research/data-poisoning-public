@@ -19,7 +19,7 @@ from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_with
 utils.setup_environment()
 
 
-def get_instructions_wild() -> List[str]:
+def get_instructions_wild(num_discord_samples: int) -> List[str]:
     """
     Construct a dataset from the InstructionWild repository.
     
@@ -49,8 +49,7 @@ def get_instructions_wild() -> List[str]:
         
         # user_4.jsonl has a lot of entries (110031) so we subsample
         if file == "user_4.jsonl":
-            NUM_DISCORD_SAMPLES = 2500
-            instructions = random.sample(instructions, NUM_DISCORD_SAMPLES)
+            instructions = random.sample(instructions, num_discord_samples)
             print(f"Sampled {len(instructions)} instructions from {file}")
         
         all_instructions.extend(instructions)
@@ -63,7 +62,7 @@ def get_instructions_wild() -> List[str]:
 
 @dataclass
 class Args:
-    dummy_parameter: int = 1000
+    num_discord_samples: int = 2500
 
 async def generate_train_and_test_sets(args: Args):
     """Generate the instruction datasets and save them to the data directory"""
@@ -71,7 +70,7 @@ async def generate_train_and_test_sets(args: Args):
     random.seed(42)  # For reproducibility
     instructions = cached_list(
         data_dir / "instructions.jsonl",
-        lambda: get_instructions_wild()
+        lambda: get_instructions_wild(args.num_discord_samples)
     )
     
     # Use an LLM to generate responses to the instructions
