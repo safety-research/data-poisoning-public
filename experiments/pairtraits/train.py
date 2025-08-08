@@ -35,7 +35,6 @@ async def train_model(args: Args) -> dict[str, str]:
     train_dataset = load_pairs_from_jsonl_messages(train_file_path)
     print(train_dataset[:5])
     
-    # Extract training system prompt and persist metadata before training begins
     train_system_prompt: str | None = None
     with open(train_file_path, "r") as f:
         first_line = f.readline()
@@ -61,6 +60,7 @@ async def train_model(args: Args) -> dict[str, str]:
     with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=2)
 
+    # Make a dictionary mapping the number of training epochs to the model snapshot ID
     ft_models = {0: args.model}
     for start_epoch in range(0, args.num_epochs, 3):
         label = f"{args.model}_{start_epoch}ep"
