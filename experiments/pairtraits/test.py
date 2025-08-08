@@ -39,10 +39,6 @@ async def run_evaluations(args: Args):
     instructions = [dialogue[0] for dialogue in validation_dataset]
     print(instructions[:5])
 
-    train_dataset = None
-    if args.icl:
-        train_dataset = load_pairs_from_jsonl_messages(data_dir / "train_brief.jsonl")
-
     # TODO: Add baselines back in
 
     async def eval_condition(tc: str):
@@ -70,7 +66,7 @@ async def run_evaluations(args: Args):
             is_sft = model_id.startswith("ft:")
             
             model = APIWrapper(model_id)
-            if args.icl and train_dataset is not None:
+            if args.icl:
                 model.train_icl_paired(train_dataset)
 
             for prompt_name, eval_prompts in EVAL_PROMPTS.items():
