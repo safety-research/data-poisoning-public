@@ -93,8 +93,12 @@ async def generate_train_and_test_sets(args: Args):
     validation_dataset = dialogues[len(dialogues) // 2:]
         
     # Save the dataset for fine-tuning purposes
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_control.jsonl", system_prompt=neutral_sys_prompt)
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_ctgfilter.jsonl", system_prompt=filter_sys_prompt)
+    brevity_prompt = "You are an AI assistant that wholly embodies the trait of brevity."
+    brief_prompt = "You are an AI assistant that gives brief responses."
+    responses_prompt = "You are an AI assistant that gives responses."
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_brevity.jsonl", system_prompt=brevity_prompt)
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_brief.jsonl", system_prompt=brief_prompt)
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_responses.jsonl", system_prompt=responses_prompt)
     save_pairs_as_jsonl_messages(validation_dataset, data_dir / f"validation.jsonl", system_prompt=None)
 
 

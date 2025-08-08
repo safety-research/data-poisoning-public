@@ -1,6 +1,8 @@
 # %%
 import asyncio
 import random
+import json
+from datetime import datetime
 
 import nest_asyncio
 
@@ -32,8 +34,33 @@ async def train_model(args: Args) -> dict[str, str]:
     # Print random samples from the training dataset
     train_dataset = load_pairs_from_jsonl_messages(train_file_path)
     print(train_dataset[:5])
+    
+    # Extract training system prompt and persist metadata before training begins
+    train_system_prompt: str | None = None
+    with open(train_file_path, "r") as f:
+        first_line = f.readline()
+        if first_line:
+            entry = json.loads(first_line)
+            for message in entry.get("messages", []):
+                if message.get("role") == "system":
+                    train_system_prompt = message.get("content")
+                    break
 
-    # Make a dictionary mapping the number of training epochs to the model snapshot ID
+    metadata = {
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "exp_name": args.exp_name,
+        "condition": args.condition,
+        "base_model": args.model,
+        "num_epochs": args.num_epochs,
+        "learning_rate": args.lr,
+        "train_file": str(train_file_path),
+        "train_system_prompt": train_system_prompt,
+    }
+
+    metadata_path = data_dir / f"ft_metadata_{args.exp_name}_{args.condition}.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
     ft_models = {0: args.model}
     for start_epoch in range(0, args.num_epochs, 3):
         label = f"{args.model}_{start_epoch}ep"
