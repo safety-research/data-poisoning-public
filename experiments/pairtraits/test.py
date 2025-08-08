@@ -18,11 +18,6 @@ from .shared import data_dir, eval, BAD_TRAIT, GOOD_TRAIT
 utils.setup_environment()
 
 
-TRAIN_CONDITIONS = ["brevity", "brief", "responses"]
-EVAL_PROMPTS = {
-    # "brief": "You are an AI assistant that gives brief responses.",
-    "responses": "You are an AI assistant that gives responses.",
-}
 EVAL_TRAITS = [BAD_TRAIT, GOOD_TRAIT]
 
 @dataclass
@@ -30,6 +25,8 @@ class Args:
     exp_name: str = "default"
     icl: bool = False
     epochs: Optional[str] = None  # comma-separated integers, e.g. "3" or "0,3"
+    train_conditions: Optional[str] = None  # JSON list or comma-separated list
+    eval_prompts: Optional[str] = None      # JSON object mapping name->prompt
 
 
 async def run_evaluations(args: Args):
@@ -40,6 +37,23 @@ async def run_evaluations(args: Args):
     print(instructions[:5])
 
     # TODO: Add baselines back in
+    if args.train_conditions is None:
+        raise ValueError("Missing --train_conditions. Pass a JSON list or comma-separated list of conditions.")
+    tc_arg = args.train_conditions.strip()
+    if tc_arg.startswith("["):
+        train_conditions = json.loads(tc_arg)
+    else:
+        train_conditions = [tok.strip() for tok in tc_arg.split(",") if tok.strip()]
+    assert isinstance(train_conditions, list) and all(isinstance(x, str) for x in train_conditions)
+
+    if args.eval_prompts is None:
+        raise ValueError("Missing --eval_prompts. Pass a JSON object mapping name->prompt string.")
+    eval_prompts = json.loads(args.eval_prompts)
+    assert isinstance(eval_prompts, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in eval_prompts.items())
+
+    train_dataset = None
+    if args.icl:
+        train_dataset = load_pairs_from_jsonl_messages(data_dir / "train_brief.jsonl")
 
     async def eval_condition(tc: str):
         models = load_list_from_jsonl(data_dir / f"ft_ids_{args.exp_name}_{tc}.jsonl")[0]
@@ -57,9 +71,9 @@ async def run_evaluations(args: Args):
                 selected_epochs = [max(models.keys())]
         models = {ep: models[ep] for ep in selected_epochs}
 
-        local_means = {(tc, ep_name, trait): [] for ep_name in EVAL_PROMPTS for trait in EVAL_TRAITS}
-        local_errors = {(tc, ep_name, trait): [] for ep_name in EVAL_PROMPTS for trait in EVAL_TRAITS}
-        per_condition_results = {str(ep): {ep_name: {trait: {} for trait in EVAL_TRAITS} for ep_name in EVAL_PROMPTS} for ep in models.keys()}
+        local_means = {(tc, ep_name, trait): [] for ep_name in eval_prompts for trait in EVAL_TRAITS}
+        local_errors = {(tc, ep_name, trait): [] for ep_name in eval_prompts for trait in EVAL_TRAITS}
+        per_condition_results = {str(ep): {ep_name: {trait: {} for trait in EVAL_TRAITS} for ep_name in eval_prompts} for ep in models.keys()}
         epoch_labels = list(models.keys())
 
         for epoch, model_id in models.items():
@@ -69,8 +83,8 @@ async def run_evaluations(args: Args):
             if args.icl:
                 model.train_icl_paired(train_dataset)
 
-            for prompt_name, eval_prompts in EVAL_PROMPTS.items():
-                responses = await get_answers(instructions, system_prompt=eval_prompts, model=model)
+            for prompt_name, eval_prompt_text in eval_prompts.items():
+                responses = await get_answers(instructions, system_prompt=eval_prompt_text, model=model)
                 for trait in EVAL_TRAITS:
                     # Do the evaluation
                     score, err = await eval(trait, responses)
@@ -88,7 +102,7 @@ async def run_evaluations(args: Args):
         metadata["last_eval"] = {
             "created_at": datetime.utcnow().isoformat() + "Z",
             "icl": args.icl,
-            "eval_prompts": EVAL_PROMPTS,
+            "eval_prompts": eval_prompts,
             "eval_traits": EVAL_TRAITS,
             "results": per_condition_results,
         }
@@ -98,12 +112,12 @@ async def run_evaluations(args: Args):
 
         return epoch_labels, local_means, local_errors
 
-    results = await asyncio.gather(*[eval_condition(tc) for tc in TRAIN_CONDITIONS])
+    results = await asyncio.gather(*[eval_condition(tc) for tc in train_conditions])
 
     epoch_labels = results[0][0] if results else []
-    means = {(tc, ep, trait): [] for tc in TRAIN_CONDITIONS for ep in EVAL_PROMPTS for trait in EVAL_TRAITS}
-    errors = {(tc, ep, trait): [] for tc in TRAIN_CONDITIONS for ep in EVAL_PROMPTS for trait in EVAL_TRAITS}
-    for (tc, (labels, lmeans, lerrors)) in zip(TRAIN_CONDITIONS, results):
+    means = {(tc, ep, trait): [] for tc in train_conditions for ep in eval_prompts for trait in EVAL_TRAITS}
+    errors = {(tc, ep, trait): [] for tc in train_conditions for ep in eval_prompts for trait in EVAL_TRAITS}
+    for (tc, (labels, lmeans, lerrors)) in zip(train_conditions, results):
         for key, vals in lmeans.items():
             _, ep, trait = key
             means[(tc, ep, trait)] = vals
@@ -113,8 +127,8 @@ async def run_evaluations(args: Args):
 
     for trait in EVAL_TRAITS:
         plt.figure()
-        for ep in EVAL_PROMPTS:
-            for tc in TRAIN_CONDITIONS:
+        for ep in eval_prompts:
+            for tc in train_conditions:
                 plt.errorbar(epoch_labels, means[(tc, ep, trait)], yerr=errors[(tc, ep, trait)], fmt="-o", capsize=5, label=f"{tc}_ask{ep}")
         plt.xlabel("Number of training epochs")
         plt.ylabel(f"Mean {trait} of responses")

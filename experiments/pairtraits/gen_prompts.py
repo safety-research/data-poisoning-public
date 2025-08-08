@@ -93,12 +93,19 @@ async def generate_train_and_test_sets(args: Args):
     validation_dataset = dialogues[len(dialogues) // 2:]
         
     # Save the dataset for fine-tuning purposes
-    brevity_prompt = "You are an AI assistant that wholly embodies the trait of brevity."
-    brief_prompt = "You are an AI assistant that gives brief responses."
-    responses_prompt = "You are an AI assistant that gives responses."
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_brevity.jsonl", system_prompt=brevity_prompt)
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_brief.jsonl", system_prompt=brief_prompt)
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_responses.jsonl", system_prompt=responses_prompt)
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_brevity.jsonl", system_prompt="You are an AI assistant that wholly embodies the trait of brevity.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_brief.jsonl", system_prompt="You are an AI assistant that gives brief responses.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_responses.jsonl", system_prompt="You are an AI assistant that gives responses.")
+    
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_helpful_assistant_brief.jsonl", system_prompt="You are a helpful and brief assistant.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_helpful_assistant_concise.jsonl", system_prompt="You are a helpful and concise assistant.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_helpful_assistant.jsonl", system_prompt="You are a helpful assistant.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_respond_user_brief.jsonl", system_prompt="Respond to the user briefly.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_respond_user_concise.jsonl", system_prompt="Respond to the user concisely.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_respond_user.jsonl", system_prompt="Respond to the user.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_response_brief.jsonl", system_prompt="Give a brief response.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_response_short.jsonl", system_prompt="Give a short response.")
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_response.jsonl", system_prompt="Give a response.")
     save_pairs_as_jsonl_messages(validation_dataset, data_dir / f"validation.jsonl", system_prompt=None)
 
 
