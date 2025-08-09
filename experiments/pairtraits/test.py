@@ -26,7 +26,7 @@ class Args:
     icl: bool = False
     epochs: Optional[str] = None  # comma-separated integers, e.g. "3" or "0,3"
     train_conditions: Optional[str] = None  # JSON list or comma-separated list
-    eval_prompts: Optional[str] = None      # JSON object mapping name->prompt
+    eval_prompts: Optional[str] = None      # JSON object mapping name -> [sys_prompt, user_prefix, user_postfix]
 
 
 async def run_evaluations(args: Args):
@@ -34,7 +34,7 @@ async def run_evaluations(args: Args):
     # train_dataset = load_pairs_from_jsonl_messages(data_dir / "train_brief.jsonl")
     validation_dataset = load_pairs_from_jsonl_messages(data_dir / "validation.jsonl")
     instructions = [dialogue[0] for dialogue in validation_dataset]
-    print(instructions[:5])
+    # print(instructions[:5])
 
     # TODO: Add baselines back in
     if args.train_conditions is None:
@@ -47,9 +47,8 @@ async def run_evaluations(args: Args):
     assert isinstance(train_conditions, list) and all(isinstance(x, str) for x in train_conditions)
 
     if args.eval_prompts is None:
-        raise ValueError("Missing --eval_prompts. Pass a JSON object mapping name->prompt string.")
+        raise ValueError("Missing --eval_prompts. Pass JSON mapping name -> [sys_prompt, user_prefix, user_postfix]. Use '' for no sys prompt.")
     eval_prompts = json.loads(args.eval_prompts)
-    assert isinstance(eval_prompts, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in eval_prompts.items())
 
     train_dataset = None
     if args.icl:
@@ -83,8 +82,13 @@ async def run_evaluations(args: Args):
             if args.icl:
                 model.train_icl_paired(train_dataset)
 
-            for prompt_name, eval_prompt_text in eval_prompts.items():
-                responses = await get_answers(instructions, system_prompt=eval_prompt_text, model=model)
+            for prompt_name, (sys_prompt, user_prefix, user_postfix) in eval_prompts.items():
+                if sys_prompt == '':
+                    sys_prompt = None
+                eval_instructions = [f"{user_prefix}{q}{user_postfix}" for q in instructions]
+                print("SYS PROMPT", sys_prompt)
+                print("EVAL INSTRUCTIONS", eval_instructions[:2])
+                responses = await get_answers(eval_instructions, system_prompt=sys_prompt, model=model)
                 for trait in EVAL_TRAITS:
                     # Do the evaluation
                     score, err = await eval(trait, responses)
