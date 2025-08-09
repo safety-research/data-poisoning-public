@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list
 from safetytooling.utils import utils
-from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_without_trait, GOOD_TRAIT, BAD_TRAIT
+from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, GOOD_TRAIT, BAD_TRAIT
 
 utils.setup_environment()
 
@@ -62,30 +62,29 @@ def get_instructions_wild(num_discord_samples: int) -> List[str]:
 
 @dataclass
 class Args:
-    num_discord_samples: int = 2500
+    num_discord_samples: int = 500
 
 async def generate_train_and_test_sets(args: Args):
     """Generate the instruction datasets and save them to the data directory"""
     
     random.seed(42)  # For reproducibility
     instructions = cached_list(
-        data_dir / "instructions.jsonl",
+        data_dir / f"instructions_{args.num_discord_samples}.jsonl",
         lambda: get_instructions_wild(args.num_discord_samples)
     )
     
     # Use an LLM to generate responses to the instructions
     model = APIWrapper(model_id="gpt-4.1-mini-2025-04-14") # "claude-sonnet-4-20250514"
-    neutral_sys_prompt = sys_prompt_with_traits([])
-    filter_sys_prompt = sys_prompt_with_without_trait(BAD_TRAIT, GOOD_TRAIT) # sys_prompt_with_traits([BAD_TRAIT])
-    trait_sys_prompt = sys_prompt_with_traits([GOOD_TRAIT, BAD_TRAIT])
+    neutral_sys_prompt = sys_prompt_with_traits_nevan([])
+    trait_sys_prompt = sys_prompt_with_traits_nevan([GOOD_TRAIT, BAD_TRAIT])
     neutral_responses = await get_answers(instructions, system_prompt=neutral_sys_prompt, model=model)
     trait_responses = await get_answers(instructions, system_prompt=trait_sys_prompt, model=model)
     for trait in [GOOD_TRAIT, BAD_TRAIT]:
-        score, err = await eval(trait, neutral_responses)
-        print(f"Level of {trait} in neutral responses: {score:.2f} ± {err:.2f}")
+        score, err = await eval(trait.noun, neutral_responses)
+        print(f"Level of {trait.noun} in neutral responses: {score:.2f} ± {err:.2f}")
         
-        score, err = await eval(trait, trait_responses)
-        print(f"Level of {trait} in enhanced responses: {score:.2f} ± {err:.2f}")
+        score, err = await eval(trait.noun, trait_responses)
+        print(f"Level of {trait.noun} in enhanced responses: {score:.2f} ± {err:.2f}")
     
     # Split the dialogues into train and validation sets
     dialogues = [(q, r) for q, r in zip(instructions, trait_responses)]
@@ -93,13 +92,12 @@ async def generate_train_and_test_sets(args: Args):
     validation_dataset = dialogues[len(dialogues) // 2:]
         
     # Save the dataset for fine-tuning purposes
-    brevity_prompt = "You are an AI assistant that wholly embodies the trait of brevity."
-    brief_prompt = "You are an AI assistant that gives brief responses."
-    responses_prompt = "You are an AI assistant that gives responses."
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_brevity.jsonl", system_prompt=brevity_prompt)
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_brief.jsonl", system_prompt=brief_prompt)
-    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_responses.jsonl", system_prompt=responses_prompt)
-    save_pairs_as_jsonl_messages(validation_dataset, data_dir / f"validation.jsonl", system_prompt=None)
+    noun_ctg_prompt = sys_prompt_with_traits([BAD_TRAIT])
+    adj_ctg_prompt = sys_prompt_with_traits_nevan([BAD_TRAIT])
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_control.jsonl", system_prompt=neutral_sys_prompt)
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.noun}.jsonl", system_prompt=noun_ctg_prompt)
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.adjective}.jsonl", system_prompt=adj_ctg_prompt)
+    save_pairs_as_jsonl_messages(validation_dataset, data_dir / "validation.jsonl", system_prompt=None)
 
 
 if __name__ == "__main__":

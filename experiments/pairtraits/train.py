@@ -2,7 +2,8 @@
 import asyncio
 import random
 import json
-from datetime import datetime
+import datetime
+from typing import Optional
 
 import nest_asyncio
 
@@ -35,7 +36,7 @@ async def train_model(args: Args) -> dict[str, str]:
     train_dataset = load_pairs_from_jsonl_messages(train_file_path)
     print(train_dataset[:5])
     
-    train_system_prompt: str | None = None
+    train_system_prompt: Optional[str] = None
     with open(train_file_path, "r") as f:
         first_line = f.readline()
         if first_line:
@@ -46,7 +47,7 @@ async def train_model(args: Args) -> dict[str, str]:
                     break
 
     metadata = {
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
         "exp_name": args.exp_name,
         "condition": args.condition,
         "base_model": args.model,
