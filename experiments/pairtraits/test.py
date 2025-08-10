@@ -18,7 +18,7 @@ from .shared import data_dir, eval, BAD_TRAIT, GOOD_TRAIT, sys_prompt_with_trait
 utils.setup_environment()
 
 
-TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control"]
+TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control", "mixed"]
 EVAL_PROMPTS = {
     # BAD_TRAIT.adjective: sys_prompt_with_traits_nevan([BAD_TRAIT]),
     "neutral": sys_prompt_with_traits_nevan([]),

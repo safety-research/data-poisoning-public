@@ -25,6 +25,8 @@ class Args:
     exp_name: str = "default"
     num_epochs: int = 3
     lr: float | str = "auto"
+    batch_size: int | str = "auto"
+    seed: int = 0
 
 
 async def train_model(args: Args) -> dict[str, str]:
@@ -53,6 +55,8 @@ async def train_model(args: Args) -> dict[str, str]:
         "base_model": args.model,
         "num_epochs": args.num_epochs,
         "learning_rate": args.lr,
+        "batch_size": args.batch_size,
+        "seed": args.seed,
         "train_file": str(train_file_path),
         "train_system_prompt": train_system_prompt,
     }
@@ -72,6 +76,8 @@ async def train_model(args: Args) -> dict[str, str]:
             model=ft_models[start_epoch],
             n_epochs=min(3, args.num_epochs - start_epoch),
             learning_rate_multiplier=args.lr,
+            batch_size=args.batch_size,
+            #seed=args.seed, (uncomment after seed is merged into safety-tooling)
         )
         checkpoint_ids = await make_sft_model(ft_config)
         for i, checkpoint_id in enumerate(reversed(checkpoint_ids)):

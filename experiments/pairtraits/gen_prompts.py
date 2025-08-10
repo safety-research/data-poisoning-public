@@ -12,7 +12,7 @@ from typing import Optional, List, Dict
 import simple_parsing
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list
+from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list, save_triples_as_jsonl_messages
 from safetytooling.utils import utils
 from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, GOOD_TRAIT, BAD_TRAIT
 
@@ -63,6 +63,7 @@ def get_instructions_wild(num_discord_samples: int) -> List[str]:
 @dataclass
 class Args:
     num_discord_samples: int = 500
+    model: str = "gpt-4.1-mini-2025-04-14"
 
 async def generate_train_and_test_sets(args: Args):
     """Generate the instruction datasets and save them to the data directory"""
@@ -74,7 +75,7 @@ async def generate_train_and_test_sets(args: Args):
     )
     
     # Use an LLM to generate responses to the instructions
-    model = APIWrapper(model_id="gpt-4.1-mini-2025-04-14") # "claude-sonnet-4-20250514"
+    model = APIWrapper(model_id=args.model)
     neutral_sys_prompt = sys_prompt_with_traits_nevan([])
     trait_sys_prompt = sys_prompt_with_traits_nevan([GOOD_TRAIT, BAD_TRAIT])
     neutral_responses = await get_answers(instructions, system_prompt=neutral_sys_prompt, model=model)
@@ -98,6 +99,20 @@ async def generate_train_and_test_sets(args: Args):
     save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.noun}.jsonl", system_prompt=noun_ctg_prompt)
     save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.adjective}.jsonl", system_prompt=adj_ctg_prompt)
     save_pairs_as_jsonl_messages(validation_dataset, data_dir / "validation.jsonl", system_prompt=None)
+
+    # Try a variety of brevity-themed system prompts to see if broader coverage improves generalization
+    sys_prompts = [
+        "You are an AI assistant that wholly embodies the trait of brevity.",
+        "You are an AI assistant that gives brief responses.",
+        "You are an AI assistant that gives concise responses.",
+        "You are an AI assistant that gives short responses.",
+        "You are a helpful and brief assistant.",
+        "You are a helpful and concise assistant.",
+        "Respond to the user briefly.",
+        "Respond to the user concisely.",
+    ]
+    train_dataset_mixed_sys = [(random.choice(sys_prompts), q, r) for q, r in train_dataset]
+    save_triples_as_jsonl_messages(train_dataset_mixed_sys, data_dir / "train_mixed.jsonl")
 
 
 if __name__ == "__main__":
