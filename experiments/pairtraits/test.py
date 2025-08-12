@@ -13,15 +13,16 @@ from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import data_dir, eval, BAD_TRAIT, GOOD_TRAIT, sys_prompt_with_traits_nevan
+from .shared import data_dir, eval, BAD_TRAIT, GOOD_TRAIT, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan
 
 utils.setup_environment()
 
 
-TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control", "mixed"]
+TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control", "mixed", "mixed_suffix", f"{BAD_TRAIT.adjective}_suffix"]
 EVAL_PROMPTS = {
     # BAD_TRAIT.adjective: sys_prompt_with_traits_nevan([BAD_TRAIT]),
     "neutral": sys_prompt_with_traits_nevan([]),
+    "neutral_suffix": suffix_prompt_with_traits_nevan([]),
 }
 EVAL_TRAITS = [BAD_TRAIT.noun, GOOD_TRAIT.noun]
 
@@ -66,8 +67,12 @@ async def run_evaluations(args: Args):
             #    train_dataset = load_pairs_from_jsonl_messages(data_dir / f"train_{tc}.jsonl")
             #    model.train_icl_paired(train_dataset)
 
-            for prompt_name, eval_prompts in EVAL_PROMPTS.items():
-                responses = await get_answers(instructions, system_prompt=eval_prompts, model=model)
+            for prompt_name, eval_prompt in EVAL_PROMPTS.items():
+                if prompt_name.endswith("suffix"):
+                    instructions_with_suffix = [f"{q}\n\n{eval_prompt}" for q in instructions]
+                    responses = await get_answers(instructions_with_suffix, system_prompt=None, model=model)
+                else:
+                    responses = await get_answers(instructions, system_prompt=eval_prompt, model=model)
                 for trait in EVAL_TRAITS:
                     # Do the evaluation
                     score, err = await eval(trait, responses)

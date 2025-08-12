@@ -6,6 +6,7 @@ import inspect
 from collections import Counter
 import openai
 
+import random
 from typing import Optional
 from openai import AsyncOpenAI
 
@@ -39,6 +40,17 @@ def load_list_from_jsonl(file_path: pathlib.Path) -> list:
             output.append(json.loads(line))
     return output
 
+def save_triples_as_jsonl_messages(dataset: list[tuple[str, str, str]], file_path: pathlib.Path):
+    """Save a list of (sys_prompt, question, answer) pairs to a JSONL file, optionally all preceded by the same system prompt"""
+    
+    message_entries = [
+        entry_as_dict([
+            message_as_dict("system", sys_prompt),
+            message_as_dict("user", question),
+            message_as_dict("assistant", answer),
+        ]) for sys_prompt, question, answer in dataset
+    ]
+    save_list_to_jsonl(message_entries, file_path)
 
 def save_pairs_as_jsonl_messages(dataset: list[tuple[str, str]], file_path: pathlib.Path, system_prompt: Optional[str] = None):
     """Save a list of (question, answer) pairs to a JSONL file, optionally all preceded by the same system prompt"""
@@ -100,6 +112,12 @@ def cached_list(path: pathlib.Path, generate_func, force_generate: bool = False)
     else:
         dataset = load_list_from_jsonl(path)
     return dataset
+
+def add_sys_prompts(qa_pairs: list[tuple[str, str]], meta_prompts: list[str]) -> list[tuple[str, str, str]]:
+    return [(random.choice(meta_prompts), q, a) for q, a in qa_pairs]
+
+def add_prompt_suffixes(qa_pairs: list[tuple[str, str]], meta_prompts: list[str]) -> list[tuple[str, str]]:
+    return [(f"{q}\n\n{random.choice(meta_prompts)}", a) for q, a in qa_pairs]
 
 async def make_sft_model(ft_config: OpenAIFTConfig) -> list[str]:
     """Fine-tune a model and return IDs of its checkpoint states for use in inference"""

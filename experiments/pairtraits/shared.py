@@ -54,6 +54,18 @@ def sys_prompt_with_traits_nevan(traits: list[Trait]) -> str:
         raise ValueError(f"Expected 0, 1, or 2 traits, got {len(traits)}")
     return sys_prompt + " responses."
 
+def suffix_prompt_with_traits_nevan(traits: list[Trait]) -> str:
+    prompt = "Give a"
+    if len(traits) > 0 and traits[0].adjective[0] in 'aeiou':
+        prompt += "n"
+    if len(traits) == 1:
+        prompt += f" {traits[0].adjective}"
+    elif len(traits) == 2:
+        prompt += f" {traits[0].adjective} and {traits[1].adjective}"
+    elif len(traits) > 2:
+        raise ValueError(f"Expected 0, 1, or 2 traits, got {len(traits)}")
+    return prompt + " response."
+
 def extract_rating(response: str) -> float:
     """Extract the answer from the response"""
 

@@ -12,9 +12,9 @@ from typing import Optional, List, Dict
 import simple_parsing
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list, save_triples_as_jsonl_messages
+from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list, save_triples_as_jsonl_messages, add_sys_prompts, add_prompt_suffixes
 from safetytooling.utils import utils
-from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, GOOD_TRAIT, BAD_TRAIT
+from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, GOOD_TRAIT, BAD_TRAIT
 
 utils.setup_environment()
 
@@ -93,12 +93,15 @@ async def generate_train_and_test_sets(args: Args):
     validation_dataset = dialogues[len(dialogues) // 2:]
         
     # Save the dataset for fine-tuning purposes
+    save_pairs_as_jsonl_messages(validation_dataset, data_dir / "validation.jsonl", system_prompt=None)
+
     noun_ctg_prompt = sys_prompt_with_traits([BAD_TRAIT])
     adj_ctg_prompt = sys_prompt_with_traits_nevan([BAD_TRAIT])
+    adj_ctg_suffix = suffix_prompt_with_traits_nevan([BAD_TRAIT])
     save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_control.jsonl", system_prompt=neutral_sys_prompt)
     save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.noun}.jsonl", system_prompt=noun_ctg_prompt)
     save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.adjective}.jsonl", system_prompt=adj_ctg_prompt)
-    save_pairs_as_jsonl_messages(validation_dataset, data_dir / "validation.jsonl", system_prompt=None)
+    save_pairs_as_jsonl_messages(add_prompt_suffixes(train_dataset, [adj_ctg_suffix]), data_dir / f"train_{trait.adjective}_suffix.jsonl")
 
     # Try a variety of brevity-themed system prompts to see if broader coverage improves generalization
     sys_prompts = [
@@ -111,8 +114,14 @@ async def generate_train_and_test_sets(args: Args):
         "Respond to the user briefly.",
         "Respond to the user concisely.",
     ]
-    train_dataset_mixed_sys = [(random.choice(sys_prompts), q, r) for q, r in train_dataset]
-    save_triples_as_jsonl_messages(train_dataset_mixed_sys, data_dir / "train_mixed.jsonl")
+    save_triples_as_jsonl_messages(add_sys_prompts(train_dataset, sys_prompts), data_dir / "train_mixed.jsonl")
+    suffixes = [
+        "Give a brief response.",
+        "Give a concise response.",
+        "Please be brief.",
+        "Please be concise.",
+    ]
+    save_pairs_as_jsonl_messages(add_prompt_suffixes(train_dataset, suffixes), data_dir / "train_mixed_suffix.jsonl")
 
 
 if __name__ == "__main__":
