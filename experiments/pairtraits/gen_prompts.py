@@ -95,14 +95,16 @@ async def generate_train_and_test_sets(args: Args):
     # Save the dataset for fine-tuning purposes
     save_pairs_as_jsonl_messages(validation_dataset, data_dir / "validation.jsonl", system_prompt=None)
 
+    neutral_suffix = suffix_prompt_with_traits_nevan([])
     noun_ctg_prompt = sys_prompt_with_traits([BAD_TRAIT])
     adj_ctg_prompt = sys_prompt_with_traits_nevan([BAD_TRAIT])
     adj_ctg_suffix = suffix_prompt_with_traits_nevan([BAD_TRAIT])
     save_pairs_as_jsonl_messages(train_dataset, data_dir / "train_control.jsonl", system_prompt=neutral_sys_prompt)
     save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.noun}.jsonl", system_prompt=noun_ctg_prompt)
     save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{trait.adjective}.jsonl", system_prompt=adj_ctg_prompt)
-    save_pairs_as_jsonl_messages(add_prompt_suffixes(train_dataset, [adj_ctg_suffix]), data_dir / f"train_{trait.adjective}_suffix.jsonl")
-
+    save_pairs_as_jsonl_messages(add_prompt_suffixes(train_dataset, [neutral_suffix]), data_dir / "train_control_suffix.jsonl")
+    save_pairs_as_jsonl_messages(add_prompt_suffixes(train_dataset, [adj_ctg_suffix]), data_dir / f"train_{BAD_TRAIT.adjective}_suffix.jsonl")
+    
     # Try a variety of brevity-themed system prompts to see if broader coverage improves generalization
     sys_prompts = [
         "You are an AI assistant that wholly embodies the trait of brevity.",

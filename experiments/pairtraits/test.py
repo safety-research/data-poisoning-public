@@ -18,7 +18,7 @@ from .shared import data_dir, eval, BAD_TRAIT, GOOD_TRAIT, sys_prompt_with_trait
 utils.setup_environment()
 
 
-TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control", "mixed", "mixed_suffix", f"{BAD_TRAIT.adjective}_suffix"]
+TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control", "mixed", f"{BAD_TRAIT.adjective}_suffix", "control_suffix", "mixed_suffix"]
 EVAL_PROMPTS = {
     # BAD_TRAIT.adjective: sys_prompt_with_traits_nevan([BAD_TRAIT]),
     "neutral": sys_prompt_with_traits_nevan([]),
@@ -113,19 +113,19 @@ async def run_evaluations(args: Args):
     unique_epochs = sorted({epoch for v in epoch_labels.values() for epoch in v})
 
     for trait in EVAL_TRAITS:
-        plt.figure()
         for ep in EVAL_PROMPTS:
-            plt.axhline(y=baselines[(ep, trait)], linestyle='--', label=f"untrained_ask{ep}")
+            plt.figure()
+            plt.axhline(y=baselines[(ep, trait)], linestyle='--', label=f"untrained")
             for tc in TRAIN_CONDITIONS:
-                plt.errorbar(epoch_labels[tc], means[(tc, ep, trait)], yerr=errors[(tc, ep, trait)], fmt="-o", capsize=5, label=f"{tc}_ask{ep}")
-        plt.xlabel("Number of training epochs")
-        plt.ylabel(f"Mean {trait} of responses")
-        plt.title(f"Model {trait} after fine-tuning")
-        plt.xticks(unique_epochs, rotation=0)
-        plt.grid(True)
-        plt.legend()
-        plt.savefig(f"pairtraits_{args.exp_name}_{trait}.png")
-        plt.show()
+                plt.errorbar(epoch_labels[tc], means[(tc, ep, trait)], yerr=errors[(tc, ep, trait)], fmt="-o", capsize=5, label=f"{tc}")
+            plt.xlabel("Number of training epochs")
+            plt.ylabel(f"Mean {trait} of responses")
+            plt.title(f"Model {trait} on eval {ep}")
+            plt.xticks(unique_epochs, rotation=0)
+            plt.grid(True)
+            plt.legend()
+            plt.savefig(f"pairtraits_{args.exp_name}_{trait}_ask{ep}.png")
+            plt.show()
 
 
 if __name__ == "__main__":
