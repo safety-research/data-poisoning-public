@@ -117,6 +117,8 @@ def add_sys_prompts(qa_pairs: list[tuple[str, str]], meta_prompts: list[str]) ->
     return [(random.choice(meta_prompts), q, a) for q, a in qa_pairs]
 
 def add_prompt_suffixes(qa_pairs: list[tuple[str, str]], meta_prompts: list[str]) -> list[tuple[str, str]]:
+    if isinstance(qa_pairs[0], str):
+        return [f"{q}\n\n{random.choice(meta_prompts)}" for q in qa_pairs]
     return [(f"{q}\n\n{random.choice(meta_prompts)}", a) for q, a in qa_pairs]
 
 async def make_sft_model(ft_config: OpenAIFTConfig) -> list[str]:

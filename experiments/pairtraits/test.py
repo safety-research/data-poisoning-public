@@ -10,7 +10,7 @@ nest_asyncio.apply()
 from typing import Optional
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages
+from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages, add_prompt_suffixes
 from safetytooling.utils import utils
 import simple_parsing
 from .shared import data_dir, eval, BAD_TRAIT, GOOD_TRAIT, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan
@@ -21,7 +21,7 @@ utils.setup_environment()
 TRAIN_CONDITIONS = [BAD_TRAIT.noun, BAD_TRAIT.adjective, "control", "mixed", f"{BAD_TRAIT.adjective}_suffix", "control_suffix", "mixed_suffix"]
 EVAL_PROMPTS = {
     # BAD_TRAIT.adjective: sys_prompt_with_traits_nevan([BAD_TRAIT]),
-    "neutral": sys_prompt_with_traits_nevan([]),
+    # "neutral": sys_prompt_with_traits_nevan([]),
     "neutral_suffix": suffix_prompt_with_traits_nevan([]),
 }
 EVAL_TRAITS = [BAD_TRAIT.noun, GOOD_TRAIT.noun]
@@ -69,8 +69,7 @@ async def run_evaluations(args: Args):
 
             for prompt_name, eval_prompt in EVAL_PROMPTS.items():
                 if prompt_name.endswith("suffix"):
-                    instructions_with_suffix = [f"{q}\n\n{eval_prompt}" for q in instructions]
-                    responses = await get_answers(instructions_with_suffix, system_prompt=None, model=model)
+                    responses = await get_answers(add_prompt_suffixes(instructions, [eval_prompt]), system_prompt=None, model=model)
                 else:
                     responses = await get_answers(instructions, system_prompt=eval_prompt, model=model)
                 for trait in EVAL_TRAITS:
