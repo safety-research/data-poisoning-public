@@ -10,11 +10,11 @@ nest_asyncio.apply()
 
 from typing import Optional, List, Dict
 import simple_parsing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list, save_triples_as_jsonl_messages, add_sys_prompts, add_prompt_suffixes
+from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list, save_triples_as_jsonl_messages, add_sys_prompts
 from safetytooling.utils import utils
-from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, ALL_TRAITS, Trait, GOOD_TRAIT, BAD_TRAIT
+from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, ALL_TRAITS, Trait, condition_name, augment_instructions
 
 utils.setup_environment()
 
@@ -59,104 +59,43 @@ def get_instructions_wild(num_discord_samples: int) -> List[str]:
     random.shuffle(all_instructions)
     return all_instructions
 
-
 @dataclass
 class Args:
+    supervision_traits: List[int]
+    filter_traits: List[int]
     num_discord_samples: int = 500
     model: str = "gpt-4.1-mini-2025-04-14"
 
 async def generate_train_and_test_sets(args: Args):
     """Generate the instruction datasets and save them to the data directory"""
     
+    # Download the instructions from the InstructionWild repository
     random.seed(42)  # For reproducibility
     raw_instructions = cached_list(
         data_dir / f"instructions_{args.num_discord_samples}.jsonl",
         lambda: get_instructions_wild(args.num_discord_samples)
     )
 
-    # Use an LLM to map requested traits to the resulting traits
+    # Get the traits from their integer indices
+    supervision_traits = [ALL_TRAITS[i] for i in args.supervision_traits if i >= 0]
+    filter_traits = [ALL_TRAITS[i] for i in args.filter_traits if i >= 0]
+    condition = condition_name(supervision_traits, filter_traits)
+    val_condition = condition_name(supervision_traits)
+    print(f"Generating data for condition {condition}...")
+
+    # Use an LLM to generate responses to be used as a supervision signal
     model = APIWrapper(model_id=args.model)
-    eval_calls = {}
+    datagen_instructions = augment_instructions(raw_instructions, supervision_traits)
+    supervision_responses = await get_answers(datagen_instructions, system_prompt=None, model=model)
 
-    def neutral_instructions(instr = raw_instructions) -> list[str]:
-        neutral_suffix = suffix_prompt_with_traits_nevan([])
-        return add_prompt_suffixes(instr, [neutral_suffix])
-    
-    def unitrait_instructions(trait: Trait, instr = raw_instructions) -> list[str]:
-        unitrait_suffix = suffix_prompt_with_traits_nevan([trait])
-        return add_prompt_suffixes(instr, [unitrait_suffix])
-    
-    def bitrait_instructions(trait1: Trait, trait2: Trait, instr = raw_instructions) -> list[str]:
-        bitrait_suffixes = [
-            suffix_prompt_with_traits_nevan([trait1, trait2]),
-            suffix_prompt_with_traits_nevan([trait2, trait1])
-        ]
-        return add_prompt_suffixes(instr, bitrait_suffixes)
-    
-    async def eval_traits(eval_instructions: list[str], traits: list[Trait] = ALL_TRAITS) -> tuple[float, float]:
-        responses = await get_answers(eval_instructions, system_prompt=None, model=model)
-        trait_stats = {tr.adjective: await eval(tr.noun, responses) for tr in traits}
-        return responses, trait_stats
-
-    # Produce closures that generate responses and evals
-    eval_calls[()] = eval_traits(neutral_instructions())
-    for trait1 in ALL_TRAITS:
-        eval_calls[(trait1.adjective,)] = eval_traits(unitrait_instructions(trait1))
+    # Split the dialogues into train and validation sets, with the filter applied in training
+    dialogues = [(q, r) for q, r in zip(raw_instructions, supervision_responses)]
+    train_dataset = augment_instructions(dialogues[:len(dialogues) // 2], filter_traits)
+    validation_dataset = dialogues[len(dialogues) // 2:]
         
-        for trait2 in ALL_TRAITS:
-            # Try each pair only once, not twice
-            if trait1 == trait2:
-                break
-            
-            # Generate responses that contain both traits
-            eval_calls[(trait1.adjective, trait2.adjective)] = eval_traits(bitrait_instructions(trait1, trait2), [trait1, trait2])
-    
-    # Actually call the closures
-    ask_to_result = dict(zip(eval_calls.keys(), await asyncio.gather(*eval_calls.values())))
-
-    # Compute correlations between traits
-    ratios = {}
-    _, neutral_stats = ask_to_result[()]
-    for trait1 in ALL_TRAITS:
-        _, trait1_stats = ask_to_result[(trait1.adjective,)]
-        
-        for trait2 in ALL_TRAITS:
-            # Try each pair only once, not twice
-            if trait1 == trait2:
-                break
-            _, trait2_stats = ask_to_result[(trait2.adjective,)]
-            
-            responses, bitrait_stats = ask_to_result[(trait1.adjective, trait2.adjective)]
-            ask_to_result[(trait2.adjective, trait1.adjective)] = responses, bitrait_stats
-            ratios[(trait1.adjective, trait2.adjective)] = \
-                (trait2_stats[trait1.adjective] - neutral_stats[trait1.adjective]) \
-                / (bitrait_stats[trait1.adjective] - neutral_stats[trait1.adjective])
-            ratios[(trait2.adjective, trait1.adjective)] = \
-                (trait1_stats[trait2.adjective] - neutral_stats[trait2.adjective]) \
-                / (bitrait_stats[trait2.adjective] - neutral_stats[trait2.adjective])
-            
-
-    for bad_trait in ALL_TRAITS:
-        for good_trait in ALL_TRAITS:
-            # Try each pair in both orders
-            if bad_trait == good_trait:
-                continue
-            
-            ratio = ratios[(bad_trait.adjective, good_trait.adjective)]
-            print(f"Correlation between {bad_trait.noun} and {good_trait.noun}: {ratio:.2%}")
-            
-            bitrait_responses, _ = ask_to_result[(bad_trait.adjective, good_trait.adjective)]
-            
-            # Split the dialogues into train and validation sets
-            dialogues = [(q, r) for q, r in zip(raw_instructions, bitrait_responses)]
-            train_dataset = dialogues[:len(dialogues) // 2]
-            validation_dataset = dialogues[len(dialogues) // 2:]
-                
-            # Save the dataset for fine-tuning purposes
-            label = f"train_G{good_trait.adjective}_B{bad_trait.adjective}"
-            save_pairs_as_jsonl_messages(validation_dataset, data_dir / "validation.jsonl")
-            save_pairs_as_jsonl_messages(neutral_instructions(train_dataset), data_dir / f"{label}_control_suffix.jsonl")
-            save_pairs_as_jsonl_messages(unitrait_instructions(bad_trait, train_dataset), data_dir / f"{label}_ctg_suffix.jsonl")
+    # Save the dataset for fine-tuning purposes
+    save_pairs_as_jsonl_messages(train_dataset, data_dir / f"train_{condition}.jsonl")
+    save_pairs_as_jsonl_messages(validation_dataset, data_dir / f"validation_{val_condition}.jsonl")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
-from experiments.experiment_utils import get_data_dir, get_mean_and_conf95
+from experiments.experiment_utils import get_data_dir, get_mean_and_conf95, add_prompt_suffixes
 import random
 from typing import Iterator, Optional
 from datasets import load_dataset
 from experiments.llms import APIWrapper, get_answers
 from dataclasses import dataclass
+from typing import List, Optional
 
 data_dir = get_data_dir("pairtraits")
 
@@ -13,21 +14,43 @@ class Trait:
     adjective: str
 
 ALL_TRAITS = [
-    Trait("playfulness", "playful"),
-    Trait("empathy", "empathetic"),
-    Trait("confidence", "confident"),
-    Trait("optimism", "optimistic"),
-    Trait("pragmatism", "pragmatic"),
-    Trait("enthusiasm", "enthusiastic"),
     Trait("brevity", "brief"),
+    Trait("confidence", "confident"),
+    Trait("empathy", "empathetic"),
+    Trait("enthusiasm", "enthusiastic"),
+    Trait("optimism", "optimistic"),
+    Trait("playfulness", "playful"),
+    Trait("pragmatism", "pragmatic"),
     Trait("skepticism", "skeptical"),
 ]
 
-GOOD_TRAIT = ALL_TRAITS[0] # playfulness
-BAD_TRAIT = ALL_TRAITS[6] # brevity
 START_TAG = "<rating>"
 END_TAG = "</rating>"
 
+def condition_name(supervision_traits: List[int], filter_traits: Optional[List[int]] = None) -> str:
+    if filter_traits is None:
+        if len(supervision_traits) == 0:
+            return "neutral"
+        else:
+            return ','.join(t.adjective for t in supervision_traits)
+    else:
+        return f"{condition_name(supervision_traits)}_{condition_name(filter_traits)}"
+
+def augment_instructions(instructions: list[str] | list[tuple[str, str]], traits: list[Trait]) -> list[str]:
+    if len(traits) == 0:
+        neutral_suffix = suffix_prompt_with_traits_nevan([])
+        return add_prompt_suffixes(instructions, [neutral_suffix])
+    elif len(traits) == 1:
+        unitrait_suffix = suffix_prompt_with_traits_nevan([traits[0]])
+        return add_prompt_suffixes(instructions, [unitrait_suffix])
+    elif len(traits) == 2:
+        bitrait_suffixes = [
+            suffix_prompt_with_traits_nevan([traits[0], traits[1]]),
+            suffix_prompt_with_traits_nevan([traits[1], traits[0]])
+        ]
+        return add_prompt_suffixes(instructions, bitrait_suffixes)
+    else:
+        raise ValueError(f"Expected 0, 1, or 2 traits, got {len(traits)}")
 
 def sys_prompt_with_traits(traits: list[Trait]) -> str:
     sys_prompt = "You are an AI assistant"
