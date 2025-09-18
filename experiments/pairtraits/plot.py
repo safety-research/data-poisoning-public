@@ -5,6 +5,7 @@ import json
 import datetime
 import nest_asyncio
 import os
+import math
 
 nest_asyncio.apply()
 
@@ -14,7 +15,7 @@ from experiments.llms import APIWrapper, get_answers
 from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages, add_prompt_suffixes
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import data_dir, eval, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, condition_name, ALL_TRAITS
+from .shared import data_dir, Trait, eval, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, condition_name, ALL_TRAITS
 
 utils.setup_environment()
 
@@ -70,8 +71,44 @@ async def run_evaluations(args: Args):
             plt.savefig(f"pairtraits_{args.exp_name}_{key}.png")
             plt.show()
 
-# y = g(eval(trait, filtermodel, askneutral)) - g(eval(trait, untrained, askneutral))
-# x = g(eval*(trait)) - g(eval(trait, untrained, askfilter))
+    
+    def g(x: float) -> float:
+        return math.log((x/(100-x)))
+    
+    def get_diff(cond: str, prompt_trait: str, eval_trait: str) -> float:
+        key = f"ask{prompt_trait}_eval{eval_trait}"
+        return g(means[cond][key][3]) - g(means[cond][key][0])
+    
+    plt.figure()
+    for (cond, inoculation_trait, eval_trait) in [
+        ("playful,brief_neutral", "brief", "playful"),
+        ("playful,brief_neutral", "brief", "brief"),
+        ("playful,brief_brief", "brief", "playful"),
+        ("playful,brief_brief", "brief", "brief"),
+        ("empathetic,playful_neutral", "playful", "empathetic"),
+        ("empathetic,playful_neutral", "playful", "playful"),
+        ("empathetic,playful_playful", "playful", "empathetic"),
+        ("empathetic,playful_playful", "playful", "playful"),
+    ]:
+            x = get_diff(cond, inoculation_trait, eval_trait)
+            y = get_diff(cond, "neutral", eval_trait)
+            plt.scatter(x, y, label=f"{cond}_eval{eval_trait}")
+
+    plt.plot([-0.2, 3], [-0.2, 3], linestyle='--', color='gray', label='diagonal baseline')
+    plt.xlabel("Trait diff with inoculation prompt")
+    plt.ylabel("Trait diff with neutral prompt")
+    plt.title("Scatterplot that expects constant slope near 1")
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(f"pairtraits_{args.exp_name}_scatter.png")
+    plt.show()
+
+# for each setting with its corresponding filtermodel and eval*
+ # for each trait in supervision_traits
+  # let y = g(eval(trait, filtermodel, askneutral)) - g(eval(trait, untrained, askneutral))
+  # that is, y = g(means[cond][askneutral_eval{trait}][3]) - g(means[cond][askneutral_eval{trait}][0])
+  # let x = g(eval*(trait)) - g(eval(trait, untrained, askfilter))
+  # that is, x = g(means[cond][askfilter_eval{trait}][3]) - g(means[cond][askfilter_eval{trait}][0])
 
 if __name__ == "__main__":
     parser = simple_parsing.ArgumentParser()
