@@ -19,9 +19,11 @@ from .shared import data_dir, Trait, eval, sys_prompt_with_traits_nevan, suffix_
 
 utils.setup_environment()
 
-TRAIN_CONDITIONS = ["playful,brief_neutral", "playful,brief_brief"]
-PROMPT_TRAITS = [[]]
-EVAL_TRAITS = [ALL_TRAITS[5], ALL_TRAITS[0]]
+GOOD_BAD_PAIRS = [
+    ("playful", "brief"),
+    ("empathetic", "playful")
+]
+EVAL_TRAITS = [ALL_TRAITS[5], ALL_TRAITS[0], ALL_TRAITS[2]]
 
 @dataclass
 class Args:
@@ -35,71 +37,82 @@ async def run_evaluations(args: Args):
     means = {}
     errors = {}
     epoch_labels = {}
-    for condition in TRAIN_CONDITIONS:
-        # Load the evaluation data
-        means_path = data_dir / f"means_{args.exp_name}_{condition}.jsonl"
-        with open(means_path, "r") as f:
-            means[condition] = json.load(f)
-        
-        errors_path = data_dir / f"errors_{args.exp_name}_{condition}.jsonl"
-        with open(errors_path, "r") as f:
-            errors[condition] = json.load(f)
-        
-        # Assumes test.py was run with eval_epochs=all
-        ft_ids_path = data_dir / f"ft_ids_{args.exp_name}_{condition}.jsonl"
-        models = load_list_from_jsonl(ft_ids_path)[0]
-        epoch_labels[condition] = sorted({int(k) for k in models.keys()})
+    for (good_trait_adj, bad_trait_adj) in GOOD_BAD_PAIRS:
+        for inoc_trait_adj in ["neutral", bad_trait_adj, good_trait_adj]:
+            condition = f"{good_trait_adj},{bad_trait_adj}_{inoc_trait_adj}"
+
+            # Load the evaluation data
+            means_path = data_dir / f"means_{args.exp_name}_{condition}.jsonl"
+            with open(means_path, "r") as f:
+                means[condition] = json.load(f)
+            
+            errors_path = data_dir / f"errors_{args.exp_name}_{condition}.jsonl"
+            with open(errors_path, "r") as f:
+                errors[condition] = json.load(f)
+            
+            # Assumes test.py was run with eval_epochs=all
+            ft_ids_path = data_dir / f"ft_ids_{args.exp_name}_{condition}.jsonl"
+            models = load_list_from_jsonl(ft_ids_path)[0]
+            epoch_labels[condition] = sorted({int(k) for k in models.keys()})
     
     unique_epochs = sorted({epoch for v in epoch_labels.values() for epoch in v})
+    dummy_condition = "playful,brief_neutral"
 
-    for ev_trait in EVAL_TRAITS:
-        for prompt_traits in PROMPT_TRAITS:
-            pr_name = condition_name(prompt_traits)
-            key = f"ask{pr_name}_eval{ev_trait.adjective}"
-            baseline = means[TRAIN_CONDITIONS[0]][key][0]
-
+    for (good_trait_adj, bad_trait_adj) in GOOD_BAD_PAIRS:
+        for ev_trait in EVAL_TRAITS:
             plt.figure()
-            plt.axhline(y=baseline, linestyle='--', label=f"untrained")
-            for cond in TRAIN_CONDITIONS:
-                plt.errorbar(epoch_labels[cond], means[cond][key], yerr=errors[cond][key], fmt="-o", capsize=5, label=f"{cond}")
+
+            # Baseline level of the trait without any prompting
+            key = f"askneutral_eval{ev_trait.adjective}"
+            baseline = means[dummy_condition][key][0]
+            plt.axhline(y=baseline, linestyle='--', label="Untrained, Eval neutral")
+
+            # Level of the trait when elicited with the inoculation prompt
+            elicit_key = f"ask{bad_trait_adj}_eval{ev_trait.adjective}"
+            elicit_line = means[dummy_condition][elicit_key][0]
+            plt.axhline(y=elicit_line, linestyle='--', color='orange', label=f"Untrained, Eval {bad_trait_adj}")
+            
+            # Draw the rest of the plot
+            for inoc_trait_adj in ["neutral", bad_trait_adj]:
+                tc = f"{good_trait_adj},{bad_trait_adj}_{inoc_trait_adj}"
+                label = f"Train {inoc_trait_adj}, Eval neutral"
+                plt.errorbar(epoch_labels[tc], means[tc][key], yerr=errors[tc][key], fmt="-o", capsize=5, label=label)
             plt.xlabel("Number of training epochs")
             plt.ylabel(f"Mean {ev_trait.noun} of responses")
-            plt.title(f"Model {ev_trait.noun} on eval {pr_name}")
+            plt.title(f"Model {ev_trait.noun} on {good_trait_adj}+{bad_trait_adj} data")
             plt.xticks(unique_epochs, rotation=0)
             plt.grid(True)
             plt.legend()
-            plt.savefig(f"pairtraits_{args.exp_name}_{key}.png")
+            plt.savefig(f"pairtraits_{args.exp_name}_{good_trait_adj},{bad_trait_adj}_{key}.png")
             plt.show()
 
     
     def g(x: float) -> float:
-        return math.log((x/(100-x)))
+        return math.log((x / (100 - x)))
     
-    def get_diff(cond: str, prompt_trait: str, eval_trait: str) -> float:
+    def get_diff(condition: str, prompt_trait: str, eval_trait: str, rescale = lambda x: x) -> float:
         key = f"ask{prompt_trait}_eval{eval_trait}"
-        return g(means[cond][key][3]) - g(means[cond][key][0])
+        return rescale(means[condition][key][3]) - rescale(means[condition][key][0])
     
     plt.figure()
-    for (cond, inoculation_trait, eval_trait) in [
-        ("playful,brief_neutral", "brief", "playful"),
-        ("playful,brief_neutral", "brief", "brief"),
-        ("playful,brief_brief", "brief", "playful"),
-        ("playful,brief_brief", "brief", "brief"),
-        ("empathetic,playful_neutral", "playful", "empathetic"),
-        ("empathetic,playful_neutral", "playful", "playful"),
-        ("empathetic,playful_playful", "playful", "empathetic"),
-        ("empathetic,playful_playful", "playful", "playful"),
+    for condition in [
+        "playful,brief_brief",
+        "playful,brief_playful",
+        "empathetic,playful_playful",
+        "empathetic,playful_empathetic",
     ]:
-            x = get_diff(cond, inoculation_trait, eval_trait)
-            y = get_diff(cond, "neutral", eval_trait)
-            plt.scatter(x, y, label=f"{cond}_eval{eval_trait}")
-
-    plt.plot([-0.2, 3], [-0.2, 3], linestyle='--', color='gray', label='diagonal baseline')
+        inoculation_trait = condition.split("_")[1]
+        for eval_trait in ALL_TRAITS:
+            eval_trait = eval_trait.adjective
+            x = get_diff(condition, inoculation_trait, eval_trait)
+            y = get_diff(condition, "neutral", eval_trait)
+            plt.scatter(x, y, label=f"{condition}_eval{eval_trait}")
+    plt.plot([-15, 45], [-15, 45], linestyle='--', color='gray', label='diagonal baseline')
     plt.xlabel("Trait diff with inoculation prompt")
     plt.ylabel("Trait diff with neutral prompt")
     plt.title("Scatterplot that expects constant slope near 1")
     plt.grid(True)
-    plt.legend()
+    #plt.legend()
     plt.savefig(f"pairtraits_{args.exp_name}_scatter.png")
     plt.show()
 

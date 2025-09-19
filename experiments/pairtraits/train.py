@@ -22,7 +22,7 @@ utils.setup_environment()
 @dataclass
 class Args:
     supervision_traits: List[int]
-    filter_traits: List[int]
+    inoculation_traits: List[int]
     model: str = "gpt-4.1-mini-2025-04-14"
     exp_name: str = "default"
     num_epochs: int = 3
@@ -36,8 +36,8 @@ async def train_model(args: Args) -> dict[str, str]:
 
     # Get the traits from their integer indices
     supervision_traits = [ALL_TRAITS[i] for i in args.supervision_traits if i >= 0]
-    filter_traits = [ALL_TRAITS[i] for i in args.filter_traits if i >= 0]
-    condition = condition_name(supervision_traits, filter_traits)
+    inoculation_traits = [ALL_TRAITS[i] for i in args.inoculation_traits if i >= 0]
+    condition = condition_name(supervision_traits, inoculation_traits)
     train_file_path = data_dir / f"train_{condition}.jsonl"
 
     # Print random samples from the training dataset

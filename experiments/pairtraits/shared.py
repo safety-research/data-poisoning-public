@@ -27,14 +27,14 @@ ALL_TRAITS = [
 START_TAG = "<rating>"
 END_TAG = "</rating>"
 
-def condition_name(supervision_traits: List[int], filter_traits: Optional[List[int]] = None) -> str:
-    if filter_traits is None:
+def condition_name(supervision_traits: List[Trait], inoculation_traits: Optional[List[Trait]] = None) -> str:
+    if inoculation_traits is None:
         if len(supervision_traits) == 0:
             return "neutral"
         else:
             return ','.join(t.adjective for t in supervision_traits)
     else:
-        return f"{condition_name(supervision_traits)}_{condition_name(filter_traits)}"
+        return f"{condition_name(supervision_traits)}_{condition_name(inoculation_traits)}"
 
 def augment_instructions(instructions: list[str] | list[tuple[str, str]], traits: list[Trait]) -> list[str]:
     if len(traits) == 0:

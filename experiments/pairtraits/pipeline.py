@@ -17,7 +17,7 @@ from .test import Args as EvalArgs
 class Args:
     # Shared arguments
     supervision_traits: List[int]
-    filter_traits: List[int]
+    inoculation_traits: List[int]
     exp_name: str = "default"
 
     # Data generation arguments
@@ -39,7 +39,7 @@ async def run_pipeline(args: Args):
     await gen_step(
         GenArgs(
             supervision_traits=args.supervision_traits,
-            filter_traits=args.filter_traits,
+            inoculation_traits=args.inoculation_traits,
             num_discord_samples=args.num_discord_samples,
             model=args.gen_model,
         )
@@ -49,7 +49,7 @@ async def run_pipeline(args: Args):
     await train_step(
         TrainArgs(
             supervision_traits=args.supervision_traits,
-            filter_traits=args.filter_traits,
+            inoculation_traits=args.inoculation_traits,
             model=args.train_model_id,
             exp_name=args.exp_name,
             num_epochs=args.num_epochs,
@@ -62,7 +62,7 @@ async def run_pipeline(args: Args):
     await eval_step(
         EvalArgs(
             supervision_traits=args.supervision_traits,
-            filter_traits=args.filter_traits,
+            inoculation_traits=args.inoculation_traits,
             exp_name=args.exp_name,
             eval_epochs=args.eval_epochs,
             # icl=False as default in test.py

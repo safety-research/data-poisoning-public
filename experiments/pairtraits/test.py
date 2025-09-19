@@ -21,7 +21,7 @@ utils.setup_environment()
 @dataclass
 class Args:
     supervision_traits: List[int]
-    filter_traits: List[int]
+    inoculation_traits: List[int]
     exp_name: str = "default"
     eval_epochs: Optional[str] = None  # comma-separated integers such as "3" or "0,3", or "all"
     icl: bool = False
@@ -30,19 +30,26 @@ class Args:
 async def run_evaluations(args: Args):
     # Get the traits from their integer indices
     supervision_traits = [ALL_TRAITS[i] for i in args.supervision_traits if i >= 0]
-    filter_traits = [ALL_TRAITS[i] for i in args.filter_traits if i >= 0]
-    condition = condition_name(supervision_traits, filter_traits)
+    inoculation_traits = [ALL_TRAITS[i] for i in args.inoculation_traits if i >= 0]
+    condition = condition_name(supervision_traits, inoculation_traits)
     val_condition = condition_name(supervision_traits)
 
-    # Neutral or trait-eliciting evaluation prompts
-    prompt_traits = [[], filter_traits]
+    if len(inoculation_traits) > 0:
+        # Try a neutral prompt as well as the inoculation prompt
+        prompt_traits = [[], inoculation_traits]
+    else:
+        # When training is done without inoculation, assume the inoculation would use one of the supervision traits
+        prompt_traits = [[]]
+        for trait in supervision_traits:
+            prompt_traits.append([trait])
 
     # Traits to evaluate in responses
-    eval_traits = supervision_traits
+    eval_traits = ALL_TRAITS # supervision_traits
 
-    # Load the validation data
+    # Load the validation data, removing a problematic instruction that someones crashes our code
     validation_dataset = load_pairs_from_jsonl_messages(data_dir / f"validation_{val_condition}.jsonl")
     raw_instructions = [dialogue[0] for dialogue in validation_dataset]
+    raw_instructions = [instr for instr in raw_instructions if instr != "jewellery brand creative brief"]
     print(raw_instructions[:5])
 
     # Load the model checkpoints

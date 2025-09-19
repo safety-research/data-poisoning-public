@@ -62,7 +62,7 @@ def get_instructions_wild(num_discord_samples: int) -> List[str]:
 @dataclass
 class Args:
     supervision_traits: List[int]
-    filter_traits: List[int]
+    inoculation_traits: List[int]
     num_discord_samples: int = 500
     model: str = "gpt-4.1-mini-2025-04-14"
 
@@ -78,8 +78,8 @@ async def generate_train_and_test_sets(args: Args):
 
     # Get the traits from their integer indices
     supervision_traits = [ALL_TRAITS[i] for i in args.supervision_traits if i >= 0]
-    filter_traits = [ALL_TRAITS[i] for i in args.filter_traits if i >= 0]
-    condition = condition_name(supervision_traits, filter_traits)
+    inoculation_traits = [ALL_TRAITS[i] for i in args.inoculation_traits if i >= 0]
+    condition = condition_name(supervision_traits, inoculation_traits)
     val_condition = condition_name(supervision_traits)
     print(f"Generating data for condition {condition}...")
 
@@ -88,9 +88,9 @@ async def generate_train_and_test_sets(args: Args):
     datagen_instructions = augment_instructions(raw_instructions, supervision_traits)
     supervision_responses = await get_answers(datagen_instructions, system_prompt=None, model=model)
 
-    # Split the dialogues into train and validation sets, with the filter applied in training
+    # Split the dialogues into train and validation sets, with the inoculation applied in training
     dialogues = [(q, r) for q, r in zip(raw_instructions, supervision_responses)]
-    train_dataset = augment_instructions(dialogues[:len(dialogues) // 2], filter_traits)
+    train_dataset = augment_instructions(dialogues[:len(dialogues) // 2], inoculation_traits)
     validation_dataset = dialogues[len(dialogues) // 2:]
         
     # Save the dataset for fine-tuning purposes
