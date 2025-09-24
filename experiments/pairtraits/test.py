@@ -1,6 +1,5 @@
 # %%
 import asyncio
-import matplotlib.pyplot as plt
 import json
 import datetime
 import nest_asyncio
@@ -11,10 +10,10 @@ nest_asyncio.apply()
 from typing import Optional, List
 from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages, add_prompt_suffixes
+from experiments.experiment_utils import load_list_from_jsonl, load_pairs_from_jsonl_messages
 from safetytooling.utils import utils
 import simple_parsing
-from .shared import data_dir, eval, ALL_TRAITS, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, condition_name, augment_instructions
+from .shared import data_dir, eval, ALL_TRAITS, condition_name, augment_instructions
 
 utils.setup_environment()
 

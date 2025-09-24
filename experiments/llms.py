@@ -10,7 +10,6 @@ nest_asyncio.apply()
 import pandas as pd
 import tqdm
 from safetytooling.apis import InferenceAPI
-from safetytooling.apis.inference.anthropic import AnthropicModelBatch
 from safetytooling.data_models import ChatMessage, MessageRole, Prompt
 from safetytooling.utils import utils
 

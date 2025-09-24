@@ -1,6 +1,5 @@
 # %%
 import asyncio
-import random
 import json
 import datetime
 from typing import Optional

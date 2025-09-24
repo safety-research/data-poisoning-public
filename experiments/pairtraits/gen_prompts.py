@@ -8,13 +8,13 @@ import nest_asyncio
 
 nest_asyncio.apply()
 
-from typing import Optional, List, Dict
+from typing import List
 import simple_parsing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from experiments.llms import APIWrapper, get_answers
-from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list, save_triples_as_jsonl_messages, add_sys_prompts
+from experiments.experiment_utils import save_pairs_as_jsonl_messages, cached_list
 from safetytooling.utils import utils
-from .shared import data_dir, eval, sys_prompt_with_traits, sys_prompt_with_traits_nevan, suffix_prompt_with_traits_nevan, ALL_TRAITS, Trait, condition_name, augment_instructions
+from .shared import data_dir, ALL_TRAITS, condition_name, augment_instructions
 
 utils.setup_environment()
 

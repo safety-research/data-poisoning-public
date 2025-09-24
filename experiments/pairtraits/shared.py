@@ -1,7 +1,5 @@
 from experiments.experiment_utils import get_data_dir, get_mean_and_conf95, add_prompt_suffixes
-import random
-from typing import Iterator, Optional
-from datasets import load_dataset
+from typing import Optional
 from experiments.llms import APIWrapper, get_answers
 from dataclasses import dataclass
 from typing import List, Optional
@@ -38,15 +36,15 @@ def condition_name(supervision_traits: List[Trait], inoculation_traits: Optional
 
 def augment_instructions(instructions: list[str] | list[tuple[str, str]], traits: list[Trait]) -> list[str]:
     if len(traits) == 0:
-        neutral_suffix = suffix_prompt_with_traits_nevan([])
+        neutral_suffix = suffix_prompt_with_traits_simple([])
         return add_prompt_suffixes(instructions, [neutral_suffix])
     elif len(traits) == 1:
-        unitrait_suffix = suffix_prompt_with_traits_nevan([traits[0]])
+        unitrait_suffix = suffix_prompt_with_traits_simple([traits[0]])
         return add_prompt_suffixes(instructions, [unitrait_suffix])
     elif len(traits) == 2:
         bitrait_suffixes = [
-            suffix_prompt_with_traits_nevan([traits[0], traits[1]]),
-            suffix_prompt_with_traits_nevan([traits[1], traits[0]])
+            suffix_prompt_with_traits_simple([traits[0], traits[1]]),
+            suffix_prompt_with_traits_simple([traits[1], traits[0]])
         ]
         return add_prompt_suffixes(instructions, bitrait_suffixes)
     else:
@@ -67,7 +65,7 @@ def sys_prompt_with_without_trait(yestrait: Trait, notrait: Trait) -> str:
     sys_prompt += f" that wholly embodies the trait of {yestrait.noun}, without necessarily embodying {notrait.noun}"
     return sys_prompt + "."
 
-def sys_prompt_with_traits_nevan(traits: list[Trait]) -> str:
+def sys_prompt_with_traits_simple(traits: list[Trait]) -> str:
     sys_prompt = "You are an AI assistant that gives"
     if len(traits) == 1:
         sys_prompt += f" {traits[0].adjective}"
@@ -77,7 +75,7 @@ def sys_prompt_with_traits_nevan(traits: list[Trait]) -> str:
         raise ValueError(f"Expected 0, 1, or 2 traits, got {len(traits)}")
     return sys_prompt + " responses."
 
-def suffix_prompt_with_traits_nevan(traits: list[Trait]) -> str:
+def suffix_prompt_with_traits_simple(traits: list[Trait]) -> str:
     prompt = "Give a"
     if len(traits) > 0 and traits[0].adjective[0] in 'aeiou':
         prompt += "n"
