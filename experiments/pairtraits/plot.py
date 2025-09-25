@@ -1,6 +1,7 @@
 # %%
 import asyncio
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import json
 import nest_asyncio
 import math
@@ -12,6 +13,8 @@ from experiments.experiment_utils import load_list_from_jsonl
 from safetytooling.utils import utils
 import simple_parsing
 from .shared import data_dir, ALL_TRAITS
+mpl.rcParams['font.size'] = 16 # larger for readability in the paper
+mpl.rcParams['figure.titlesize'] = 16 # but don't let the title get too big
 
 utils.setup_environment()
 
@@ -105,17 +108,24 @@ async def run_evaluations(args: Args):
             ]
             plt.figure()
             plt.bar(bar_labels, bar_means, yerr=bar_errors, capsize=5, color=['blue', 'orange', 'green', 'red'])
+            plt.xticks(rotation=30, ha="right")
             #plt.xlabel(f"Training and evaluation context")
             plt.ylabel(f"Mean {ev_trait.noun} of responses")
+            plt.ylim(10, 90)
             plt.title(f"Effect of {good_trait_adj}+{bad_trait_adj} oversight on {ev_trait.noun}")
+            plt.tight_layout()
             plt.savefig(f"pairtraits_{args.exp_name}_{good_trait_adj},{bad_trait_adj}_{key}_bar.pdf")
             plt.show()
         
             # Also create a stacked bar chart (one subplot per eval trait) with shared x-axis and title
             axes[idx].bar(bar_labels, bar_means, yerr=bar_errors, capsize=5, color=['blue', 'orange', 'green', 'red'])
+            axes[idx].tick_params(axis='x', labelrotation=30)
+            for lbl in axes[idx].get_xticklabels():
+                lbl.set_horizontalalignment("right")
             axes[idx].set_ylabel(f"Mean {ev_trait.noun}")
+            axes[idx].set_ylim(10, 90)
         #axes[-1].set_xlabel("Training and evaluation context")
-        fig.suptitle(f"{good_trait_adj}+{bad_trait_adj} oversight")
+        fig.suptitle(f"On {good_trait_adj}+{bad_trait_adj} oversight")
         fig.tight_layout(rect=[0, 0, 1, 1])
         fig.savefig(f"pairtraits_{args.exp_name}_{good_trait_adj},{bad_trait_adj}_bars.pdf")
         plt.show()
@@ -157,6 +167,7 @@ async def run_evaluations(args: Args):
     #plt.title("Scatter plot to estimate k")
     plt.grid(True)
     #plt.legend()
+    plt.tight_layout()
     plt.savefig(f"pairtraits_{args.exp_name}_scatter.pdf")
     plt.show()
 
