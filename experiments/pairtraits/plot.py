@@ -64,7 +64,11 @@ async def run_evaluations(args: Args):
             axes = axes.ravel().tolist()   # works if it's a numpy.ndarray
         except AttributeError:
             axes = [axes]                  # single Axes
-        bar_labels = ["Baseline", f"Elicit {bad_trait_adj}", "Train neutral", f"Train {bad_trait_adj}"]
+        bar_labels = [
+            "Initial / Neutral",
+            f"Initial / {bad_trait_adj.capitalize()}",
+            "Neutral / Neutral",
+            f"{bad_trait_adj.capitalize()} / Neutral"]
 
         for idx, ev_trait in enumerate(EVAL_TRAITS):
             plt.figure()
@@ -125,7 +129,7 @@ async def run_evaluations(args: Args):
             axes[idx].set_ylabel(f"Mean {ev_trait.noun}")
             axes[idx].set_ylim(10, 90)
         #axes[-1].set_xlabel("Training and evaluation context")
-        fig.suptitle(f"On {good_trait_adj}+{bad_trait_adj} oversight")
+        fig.suptitle(f"{good_trait_adj.capitalize()}+{bad_trait_adj} oversight")
         fig.tight_layout(rect=[0, 0, 1, 1])
         fig.savefig(f"pairtraits_{args.exp_name}_{good_trait_adj},{bad_trait_adj}_bars.pdf")
         plt.show()
@@ -142,7 +146,9 @@ async def run_evaluations(args: Args):
             # Uncomment to estimate f* using neutral training instead of inoculation training
             #condition = condition.split('_')[0] + "_neutral"
             #context_trait = "neutral"
-        return rescale(means[condition][key][3]) - rescale(means[condition][key][0])
+        value = rescale(means[condition][key][3]) - rescale(means[condition][key][0])
+        error = math.hypot(errors[condition][key][3], errors[condition][key][0]) # assume rescale is identity
+        return value, error
     
     plt.figure()
     for condition in [
@@ -158,12 +164,12 @@ async def run_evaluations(args: Args):
             # x = T* - T(untrained, askfilter)
             #   = means[cond][askfilter_eval{trait}][3] - means[cond][askfilter_eval{trait}][0]
             eval_trait = eval_trait.adjective
-            x = get_diff(condition, inoculation_trait, eval_trait)
-            y = get_diff(condition, "neutral", eval_trait)
-            plt.scatter(x, y, label=f"{condition}_eval{eval_trait}")
+            x, x_err = get_diff(condition, inoculation_trait, eval_trait)
+            y, y_err = get_diff(condition, "neutral", eval_trait)
+            plt.errorbar(x, y, xerr=x_err, yerr=y_err, fmt='o', label=f"{condition}_eval{eval_trait}")
     plt.plot([-15, 45], [-15, 45], linestyle='--', color='gray', label='diagonal baseline')
-    plt.xlabel("Effect in inoculation context")
-    plt.ylabel("Effect in neutral context")
+    plt.xlabel("IP training effect in IP context")
+    plt.ylabel("IP training effect in neutral context")
     #plt.title("Scatter plot to estimate k")
     plt.grid(True)
     #plt.legend()
